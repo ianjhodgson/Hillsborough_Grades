@@ -28,7 +28,8 @@ school_grades <- read_csv('data/schoolgrades23_linked.csv') %>%
 
 A statewide report, released Dec. 11, revealed that a large share of Hillsborough County's 200,000 students are performing below grade level for English and math.
 
-Twenty-eight of the districts 219 public schools that received a grade got a D and four received an F. That's up from seven the year before.
+Twenty-eight of the districts 219 public schools that received a grade got a D and four received an F.
+That's up from seven the year before.
 
 Six charter schools received a D or F grade, up from TK the year before.
 
@@ -156,6 +157,8 @@ Every low performing school in Hillsborough was 100% low-income.
 On average, Hillsborough schools perform only slightly worse than the state overall.
 The greatest discrepancy was among Hillsborough elementary schools, where the average total score was 48.9% - 4.5 percentage points lower than the statewide average.
 
+Twenty-four Hillsborough's 127 elementary schools received an D and four received an F.
+
 ```{r, echo = F}
 school_grades %>% 
   filter(district_name %in% tampa_bay_districts) %>% 
@@ -202,7 +205,7 @@ The largest component of school grades are student achievement scores.
 The scores are broken up into four categories: English, math, science and social studies.
 English exams are taken from grades 3-10, math grades 3-8, science grades 5 and 8 and social studies grades TK.
 
-For each subject, students are graded on a scale from 1 to 5, with 3 and above considered performing at or above grade level. 
+For each subject, students are graded on a scale from 1 to 5, with 3 and above considered performing at or above grade level.
 Schools are scored from zero to 100 corresponding to the share of students that score a 3 or higher.
 
 The scores are not adjusted for exceptionally good or poor students.
@@ -337,7 +340,8 @@ ggplot() +
 At two of the worst performing elementary schools in the state - Potter Elementary and Just Elementary - three in five students were reading at the lowest level.
 
 Even well performing schools had high shares of very poor readers.
-Three middle schools - Greco, Pierce and Buchanan Middle - all had more than 60% of students reading at the lowest level despite earning a "C" grade overall. Fourteen schools earned a "C" grade despite having more than half of students reading at level 1. 
+Three middle schools - Greco, Pierce and Buchanan Middle - all had more than 60% of students reading at the lowest level despite earning a "C" grade overall.
+Fourteen schools earned a "C" grade despite having more than half of students reading at level 1.
 
 ```{r, echo = F}
 school_grades %>% 
@@ -360,7 +364,7 @@ school_grades %>%
 
 ## Mathematics
 
-Students from grades 3 to 8 take the mathematics exam each year. 
+Students from grades 3 to 8 take the mathematics exam each year.
 
 ```{r county math levels table, echo =F}
 school_grades %>% 
@@ -417,3 +421,10 @@ school_grades %>%
         caption = "Hillsborough Mathematics scores by school grade")
 ```
 
+**Questions**
+
+-   Weighted average or not?
+
+-   Group D and F schools?
+
+-   

@@ -1,9 +1,14 @@
 ## clean Hillsborough In/Out reports
 library(tidyverse)
+library(stringdist)
 rm(list = ls())
 
 inout_files <- list.files('data/InOutReports/raw')
 sum_na <- function(x){sum(x, na.rm = T)}
+
+## School and district numbers ----
+hills_school_ids <- read_csv("data/schoolgrades23_linked.csv") %>% 
+  distinct(district_number, district_name, school_number, school_name)
 
 ## In Reports ----
 in_reports <- lapply(inout_files[which(str_detect(inout_files, "InReport"))],
@@ -30,17 +35,13 @@ in_reports <- lapply(inout_files[which(str_detect(inout_files, "InReport"))],
                sum, na.rm = T) %>% 
   mutate(total_row = str_detect(zoned_school, "Total"))
 
-#################
-# QUESTIONS ----
-# Why do some schools show up as both zoned school and current placement (e.g. Alafia)?
-# Why do some school-school pairs show up as multiple placements (e.g., Bellamy -> Alexander)?
-################
+### Match school names to school id from grade report
+unique(in_reports %>% current_school) %>% 
+  lapply(function(x){
+    potential_matches = hills_school_ids %>% 
+      match_value = strdis
+  })
 
-View(in_reports %>% group_by(zoned_school, current_school) %>% mutate(count = n()) %>% filter(count > 1) %>% arrange(zoned_school, current_school))
-
-temp <- read_csv(paste0('data/InOutReports/raw/', inout_files[1]),
-                 col_types = "cccciiiiiii") %>% 
-  janitor::clean_names()
 
 write_csv(in_reports %>% filter(total_row == T),
           "data/InOutReports/InReports_Total.csv")
