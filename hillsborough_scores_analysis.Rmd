@@ -1,0 +1,419 @@
+---
+title: "Hillsborough Assessment Analysis"
+author: "Ian Hodgson"
+date: "2023-12-15"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(knitr)
+
+rm(list = ls())
+
+# define tampa bay districts
+tampa_bay_districts = c("HILLSBOROUGH", "PINELLAS", "PASCO")
+
+# read in school grade data
+school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
+  filter(charter_school == "NO", 
+         alternative_ese_center_school == "N")
+```
+
+A statewide report, released Dec. 11, revealed that a large share of Hillsborough County's 200,000 students are performing below grade level for English and math.
+
+Twenty-eight of the districts 219 public schools that received a grade got a D and four received an F. That's up from seven the year before.
+
+Six charter schools received a D or F grade, up from TK the year before.
+
+Officials cautioned that this year's grades are not comparable to previous years and do not include adjustments for improvements over prior year's performance.
+
+# Hillsboroughs Failing Schools
+
+Hillsborough is among the largest districts in the state and has the highest number of low performing schools.
+
+TK schools are inside Tampa city limits, TK are in TK...
+
+```{r school grades, echo = F}
+
+
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH", 
+         informational_baseline_grade_2023 %in% c('D', 'F')) %>%
+  select(school_name, 
+         grade_2023 = informational_baseline_grade_2023,
+         ela_score = english_language_arts_achievement, 
+         math_score = mathematics_achievement,
+         science_score = science_achievement) %>% 
+  arrange(desc(grade_2023), school_name)
+
+```
+
+Adjusted for student population, the district has the third-highest share of students in a D of F school among districts with more than 10,000 students.
+
+```{r, echo = F}
+school_grades %>%
+  mutate(grade_d_f = (informational_baseline_grade_2023 %in% c('D', 'F')),
+         students_d_f = number_of_students * grade_d_f) %>% 
+  group_by(district_name) %>% 
+  summarise(grade_d_f = sum(grade_d_f), 
+            students_d_f = sum(students_d_f),
+            students_total = sum(number_of_students)) %>% 
+  mutate(share_students_d_f = round(students_d_f/students_total, 3)*100) %>% 
+  filter(students_total > 10000) %>%
+  select(district_name, grade_d_f, share_students_d_f) %>% 
+  arrange(desc(share_students_d_f))
+```
+
+# Schools with high shares of minority and low-income students do worse.
+
+Statewide, schools with a higher share of minority and/or low-income students tend to perform worse.
+Hillsborough has a higher share of minority students the rest of the state.
+Hillsborough schools are 72% minority, on average, compared with 65% statewide.
+
+```{r Hillsborough has a higher share of minority and low income students, echo = F}
+ggplot() + 
+  geom_density(data = school_grades %>% filter(district_name == "HILLSBOROUGH"),
+                        aes(x = percent_of_minority_students),
+                        fill = "red", 
+                        alpha = .3) + 
+  geom_density(data = school_grades,
+                        aes(x = percent_of_minority_students),
+                        fill = "blue", 
+                        alpha = .3) + 
+  facet_wrap(facet = "type") + 
+  labs(title = "Hillsborough has a higher share minority students.") + 
+  xlab("Percent of minority students")
+```
+
+Hillsborough has a similar overall share of low-income student relative to the state.
+However, Hillsborough is more segregated, with a higher share being under 50% low-income or 100% low-income, relative to the rest of the state.
+
+```{r Hillsborough has a higher share of minority and low income students, echo = F}
+ggplot() + 
+  geom_density(data = school_grades %>% filter(district_name == "HILLSBOROUGH"),
+                        aes(x = percent_of_economically_disadvantaged_students),
+                        fill = "red", 
+                        alpha = .3) + 
+  geom_density(data = school_grades,
+                        aes(x = percent_of_economically_disadvantaged_students),
+                        fill = "blue", 
+                        alpha = .3) + 
+  facet_wrap(facet = "type") + 
+  labs(title = "Hillsborough has a higher share students from lower-income families.") + 
+  xlab("Percent of economically disadvantaged students")
+```
+
+Students who are minorities and/or lower-income are more likely to attend a low-performing school in Hillsborough, relative to the rest of the state.
+
+`r summary(school_grades %>% select(minority = percent_of_minority_students, low_income = percent_of_economically_disadvantaged_students))`
+
+`r summary(school_grades %>% filter(district_name == "HILLSBOROUGH") %>% select(minority = percent_of_minority_students, low_income = percent_of_economically_disadvantaged_students))`
+
+At "A" schools in Hillsborough, roughly half of students were minorities and 40% were low-income.
+`r summary(school_grades %>% filter(district_name == "HILLSBOROUGH", informational_baseline_grade_2023 == "A") %>% select(minority = percent_of_minority_students, low_income = percent_of_economically_disadvantaged_students))`
+
+At "D" and "F" schools, 91% were minority, on average.
+Every low performing school in Hillsborough was 100% low-income.
+`r summary(school_grades %>% filter(district_name == "HILLSBOROUGH", informational_baseline_grade_2023 %in% c("D", "F")) %>% select(minority = percent_of_minority_students, low_income = percent_of_economically_disadvantaged_students))`
+
+```{r, echo = F}
+# school_grades %>% 
+#   filter(district_name == "HILLSBOROUGH",
+#          informational_baseline_grade_2023 != "I") %>% 
+#   mutate(low_income_num = percent_of_economically_disadvantaged_students * number_of_students / 100,
+#          minority_num = percent_of_minority_students * number_of_students / 100,
+#          score = case_when(
+#            informational_baseline_grade_2023 %in% c("D", "F") ~ "grade D-F", 
+#            informational_baseline_grade_2023  %in% c("B", "C") ~ "grade B-C", 
+#            informational_baseline_grade_2023 == "A" ~ "grade A", 
+#            TRUE ~ "unknown")) %>%
+#   group_by(score) %>% 
+#   summarise(low_income = sum(low_income_num, na.rm = T),
+#             minority = sum(minority_num, na.rm = T),
+#             ela_level1 = sum(ela_level1_num, na.rm = T),
+#             math_level1 = sum(math_level1_num, na.rm = T),
+#             total_students = sum(number_of_students)) %>% 
+#   mutate(share_low_income = low_income/total_students,
+#          share_minority = minority/total_students,
+#          share_ela_level1 = ela_level1/total_students,
+#          share_math_level1 = math_level1/total_students) %>% 
+#   select(score, total_students, starts_with("share")) %>% 
+#   arrange(score) %>% 
+#   kable(caption = "Low performing schools have a higher share of low-income and minority students.",
+#         align = "lccccc",
+#         digits = 3)
+```
+
+## Hillsborough elementary schools are falling behind.
+
+On average, Hillsborough schools perform only slightly worse than the state overall.
+The greatest discrepancy was among Hillsborough elementary schools, where the average total score was 48.9% - 4.5 percentage points lower than the statewide average.
+
+```{r, echo = F}
+school_grades %>% 
+  filter(district_name %in% tampa_bay_districts) %>% 
+  group_by(district_name, type) %>% 
+  summarise(Score = mean(percent_of_total_possible_points, na.rm = T)) %>% 
+  pivot_wider(names_from = "type", values_from = "Score") %>% 
+  rename(District = district_name) %>% 
+  select(District, Elementary, Middle, High, Combination) %>% 
+  bind_rows(school_grades %>% 
+              ungroup() %>% 
+              group_by(type) %>% 
+              summarise(Score = mean(percent_of_total_possible_points, na.rm = T)) %>% 
+              mutate(district_name = "FLORIDA") %>%
+              pivot_wider(names_from = "type", values_from = "Score") %>% 
+              rename(District = district_name) %>% 
+              select(District, Elementary, Middle, High, Combination)) %>% 
+  kable(digits = 1,
+        align = "lccc",
+        caption = "Hillsborough elementary schools perform the worst in the Tampa Bay area, on average.")
+```
+
+However, variance in performance in higher in Hillsborough, meaning that the district's poor performing school do especially badly.
+Notice how in the chart below how Hillsborough (in red) tends to skew to the left of the statewide levels (in blue), especially the district's elementary schools.
+
+```{r, echo = F}
+ggplot() + 
+  geom_density(data = school_grades %>% filter(district_name == "HILLSBOROUGH"),
+                        aes(x = percent_of_total_possible_points),
+                        fill = "red", 
+                        alpha = .3) + 
+  geom_density(data = school_grades,
+                        aes(x = percent_of_total_possible_points),
+                        fill = "blue", 
+                        alpha = .3) + 
+  facet_wrap(facet = "type") + 
+  labs(title = "Hillsborough has a higher share of low-performing schools.") + 
+  xlab("Percent of Total Possible Points")
+```
+
+# Student Achievement
+
+The largest component of school grades are student achievement scores.
+
+The scores are broken up into four categories: English, math, science and social studies.
+English exams are taken from grades 3-10, math grades 3-8, science grades 5 and 8 and social studies grades TK.
+
+For each subject, students are graded on a scale from 1 to 5, with 3 and above considered performing at or above grade level. 
+Schools are scored from zero to 100 corresponding to the share of students that score a 3 or higher.
+
+The scores are not adjusted for exceptionally good or poor students.
+
+It is possible for a school to score fairly well, but have a high share of students reading at the lowest level (level 1).
+
+```{r hillborough acievement chart, echo = F}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>% 
+  select(school_name,
+         informational_baseline_grade_2023,
+         english_language_arts_achievement, 
+         mathematics_achievement,
+         science_achievement,
+         social_studies_achievement) %>% 
+  rename(English = english_language_arts_achievement, 
+         Math = mathematics_achievement, 
+         Science = science_achievement,
+         `Social Studies` = social_studies_achievement,
+         Grade = informational_baseline_grade_2023) %>% 
+  pivot_longer(cols = 3:6,
+               names_to = "Subject", 
+               values_to = "Score") %>% 
+  ggplot() + 
+  geom_jitter(aes(x = Score, y = Grade,
+                  col = Subject), 
+              alpha = .3,
+              height = .15) + 
+  facet_wrap(facet = "Subject", ncol = 2)
+```
+
+## English Language arts
+
+Students from grade 3 to 10 take the English language arts assessment annually.
+
+More than half of Hillsborough students who took the test were unable to demonstrate passing levels of proficiency and one-third performed at an "inadequate" level, indicating that they are "highly likely to need substantial support for the next grade."
+
+Those numbers are only slightly higher than statewide averages, but what's concerning is that Hillsborough's poor performing students are more concentrated in a smaller number of failing schools.
+
+```{r county ela levels table, echo =F}
+school_grades %>% 
+  filter(district_name %in% c("HILLSBOROUGH",
+                              "PINELLAS", 
+                              "PASCO",
+                              "POLK")) %>% 
+  group_by(district_name) %>% 
+  summarise_at(.vars = vars(number_of_students, 
+                            ela_level1_num, 
+                            ela_level2_num, 
+                            ela_level3_num, 
+                            ela_level4_num, 
+                            ela_level5_num),
+               .funs = function(x){sum(x, na.rm = T)}) %>% 
+  mutate(ela_level1 = ela_level1_num/number_of_students*100,
+         ela_level2 = ela_level2_num/number_of_students*100,
+         ela_level3 = ela_level3_num/number_of_students*100,
+         ela_level4 = ela_level4_num/number_of_students*100,
+         ela_level5 = ela_level5_num/number_of_students*100) %>% 
+  select(District = district_name, 
+         `Level 1` = ela_level1,
+         `Level 2` = ela_level2,
+         `Level 3` = ela_level3,
+         `Level 4` = ela_level4,
+         `Level 5` = ela_level5) %>% 
+  kable(digits = 1,
+        caption = "English languge arts scores by level")
+```
+
+```{r county ela levels table, echo =F}
+school_grades %>% 
+  filter(district_name %in% c("HILLSBOROUGH")) %>% 
+  group_by(informational_baseline_grade_2023) %>% 
+  summarise_at(.vars = vars(number_of_students, 
+                            ela_level1_num, 
+                            ela_level2_num, 
+                            ela_level3_num, 
+                            ela_level4_num, 
+                            ela_level5_num),
+               .funs = function(x){sum(x, na.rm = T)}) %>% 
+  mutate(ela_level1 = ela_level1_num/number_of_students*100,
+         ela_level2 = ela_level2_num/number_of_students*100,
+         ela_level3 = ela_level3_num/number_of_students*100,
+         ela_level4 = ela_level4_num/number_of_students*100,
+         ela_level5 = ela_level5_num/number_of_students*100) %>% 
+  select(Grade = informational_baseline_grade_2023, 
+         `Level 1` = ela_level1,
+         `Level 2` = ela_level2,
+         `Level 3` = ela_level3,
+         `Level 4` = ela_level4,
+         `Level 5` = ela_level5) %>% 
+  kable(digits = 1,
+        caption = "Hillsborough English languge arts scores by school grade")
+```
+
+The issue in Hillsborough is that the poor performing students are concentrated among low-rated schools.
+
+```{r, echo = F}
+ggplot() + 
+  geom_density(data = school_grades %>% filter(district_name == "HILLSBOROUGH"),
+                        aes(x = english_language_arts_achievement),
+                        fill = "red", 
+                        alpha = .3) + 
+  geom_density(data = school_grades,
+                        aes(x = english_language_arts_achievement),
+                        fill = "blue", 
+                        alpha = .3) + 
+  facet_wrap(facet = "type") + 
+  labs(title = "Hillsborough has a higher share of low performing elementary, middle\nand combination schools, relative to the state overall.",
+       subtitle = "English Language Arts Achievement")
+
+```
+
+There were 138 schools in Hillsborough where more than half of students were reading below grade level.
+There were 32 where more than half of students were reading at level 1.
+
+```{r, echo = F}
+ggplot() + 
+  geom_density(data = school_grades %>% filter(district_name == "HILLSBOROUGH"),
+                        aes(x = ela_level1),
+                        fill = "red", 
+                        alpha = .3) + 
+  geom_density(data = school_grades,
+                        aes(x = ela_level1),
+                        fill = "blue", 
+                        alpha = .3) + 
+  facet_wrap(facet = "type") + 
+  labs(title = "Hillsborough has a higher share of students reading at the lowest level.",
+       subtitle = "Share of students reading at level 1")
+```
+
+At two of the worst performing elementary schools in the state - Potter Elementary and Just Elementary - three in five students were reading at the lowest level.
+
+Even well performing schools had high shares of very poor readers.
+Three middle schools - Greco, Pierce and Buchanan Middle - all had more than 60% of students reading at the lowest level despite earning a "C" grade overall. Fourteen schools earned a "C" grade despite having more than half of students reading at level 1. 
+
+```{r, echo = F}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>% 
+  rename(Grade = informational_baseline_grade_2023) %>% 
+  ggplot() + 
+  geom_jitter(aes(x = ela_level1, 
+                  y = Grade, 
+                  col = Grade), 
+              height = .15,
+              width = 0,
+              alpha = .5) + 
+    facet_wrap(facet = "type") + 
+  geom_vline(xintercept = .51,
+             alpha = .5) + 
+  labs(title = "More than half of students are level 1 readers at 32 Hillsborough schools",
+       subtitle = "")
+```
+
+## Mathematics
+
+Students from grades 3 to 8 take the mathematics exam each year. 
+
+```{r county math levels table, echo =F}
+school_grades %>% 
+  filter(district_name %in% c("HILLSBOROUGH",
+                              "PINELLAS", 
+                              "PASCO",
+                              "POLK")) %>% 
+  group_by(district_name) %>% 
+  summarise_at(.vars = vars(number_of_students_math, 
+                            math_level1_num, 
+                            math_level2_num, 
+                            math_level3_num, 
+                            math_level4_num, 
+                            math_level5_num),
+               .funs = function(x){sum(x, na.rm = T)}) %>% 
+  mutate(math_level1 = math_level1_num/number_of_students_math*100,
+         math_level2 = math_level2_num/number_of_students_math*100,
+         math_level3 = math_level3_num/number_of_students_math*100,
+         math_level4 = math_level4_num/number_of_students_math*100,
+         math_level5 = math_level5_num/number_of_students_math*100) %>% 
+  select(District = district_name, 
+         `Level 1` = math_level1,
+         `Level 2` = math_level2,
+         `Level 3` = math_level3,
+         `Level 4` = math_level4,
+         `Level 5` = math_level5) %>% 
+  kable(digits = 1,
+        caption = "Mathematics scores by level")
+```
+
+```{r county math levels table, echo =F}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  group_by(informational_baseline_grade_2023) %>% 
+  summarise_at(.vars = vars(number_of_students_math, 
+                            math_level1_num, 
+                            math_level2_num, 
+                            math_level3_num, 
+                            math_level4_num, 
+                            math_level5_num),
+               .funs = function(x){sum(x, na.rm = T)}) %>% 
+  mutate(math_level1 = math_level1_num/number_of_students_math*100,
+         math_level2 = math_level2_num/number_of_students_math*100,
+         math_level3 = math_level3_num/number_of_students_math*100,
+         math_level4 = math_level4_num/number_of_students_math*100,
+         math_level5 = math_level5_num/number_of_students_math*100) %>% 
+  select(Grade = informational_baseline_grade_2023, 
+         `Level 1` = math_level1,
+         `Level 2` = math_level2,
+         `Level 3` = math_level3,
+         `Level 4` = math_level4,
+         `Level 5` = math_level5) %>% 
+  kable(digits = 1,
+        caption = "Hillsborough Mathematics scores by school grade")
+```
+
