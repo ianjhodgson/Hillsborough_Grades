@@ -67,8 +67,33 @@ school_grades %>%
             students_d_f = sum(students_d_f),
             students_total = sum(number_of_students)) %>% 
   mutate(share_students_d_f = round(students_d_f/students_total, 3)*100) %>% 
-  filter(students_total > 10000) %>%
+  # filter(students_total > 10000) %>%
   select(district_name, grade_d_f, share_students_d_f) %>% 
+  arrange(desc(share_students_d_f))
+
+## temp school output for Tom ----
+school_pop <- read_xlsx("data/FLDOE/2223MembBySchoolByGrade.xlsx", 
+                        sheet = 2, 
+                        skip = 2,
+                        na = "*") %>% 
+  janitor::clean_names() %>% 
+  rename(number_of_students_total = number_of_students)
+
+school_grades %>% 
+  mutate(school_number = as.numeric(school_number),
+         district_number = as.numeric(district_number)) %>% 
+  left_join(school_pop %>% select(district_number, school_number, number_of_students_total), 
+            by = c("district_number", "school_number")) %>% 
+  mutate(grade_d_f = (informational_baseline_grade_2023 %in% c('D', 'F')),
+         students_d_f = number_of_students_total * grade_d_f) %>% 
+  group_by(district_name) %>% 
+  summarise(grade_d_f = sum(grade_d_f, na.rm = T), 
+            students_d_f = sum(students_d_f, na.rm = T),
+            students_total = sum(number_of_students_total, na.rm = T),
+            schools_total = n()) %>% 
+  mutate(share_students_d_f = round(students_d_f/students_total, 3)*100) %>% 
+  # filter(students_total > 10000) %>%
+  select(district_name, students_total, grade_d_f, share_students_d_f) %>% 
   arrange(desc(share_students_d_f))
 ```
 
