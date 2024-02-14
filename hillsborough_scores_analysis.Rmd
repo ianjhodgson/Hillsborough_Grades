@@ -46,7 +46,7 @@ TK schools are inside Tampa city limits, TK are in TK...
 
 school_grades %>% 
   filter(district_name == "HILLSBOROUGH", 
-         informational_baseline_grade_2023 %in% c('D', 'F')) %>%
+         informational_baseline_grade_2023 %in% c('A')) %>%
   select(school_name, 
          grade_2023 = informational_baseline_grade_2023,
          ela_score = english_language_arts_achievement, 
@@ -91,10 +91,12 @@ school_grades %>%
             students_d_f = sum(students_d_f, na.rm = T),
             students_total = sum(number_of_students_total, na.rm = T),
             schools_total = n()) %>% 
-  mutate(share_students_d_f = round(students_d_f/students_total, 3)*100) %>% 
+  mutate(share_students_d_f = round(students_d_f/students_total, 3)*100,
+         share_of_schools_d_f = round(grade_d_f/schools_total,3)*100) %>% 
   # filter(students_total > 10000) %>%
-  select(district_name, students_total, grade_d_f, share_students_d_f) %>% 
-  arrange(desc(share_students_d_f))
+  select(district_name, grade_d_f, share_of_schools_d_f, students_total, students_d_f, share_students_d_f) %>%
+  arrange(desc(share_students_d_f)) %>% 
+  write_csv("temp_df_schools_tom2.csv")
 ```
 
 # Schools with high shares of minority and low-income students do worse.
