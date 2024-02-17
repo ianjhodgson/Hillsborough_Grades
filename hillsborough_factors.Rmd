@@ -1,0 +1,184 @@
+---
+title: "Hillsborough D-F Schools"
+author: "Ian Hodgson"
+date: "2023-12-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+
+school_grades <- read_csv('data/schoolgrades23_linked.csv',show_col_types = F) %>% 
+  filter(charter_school == "NO", 
+         alternative_ese_center_school == "N",
+         district_name == "HILLSBOROUGH") %>% 
+  mutate(df_flag = informational_baseline_grade_2023 %in% c("D", "F"))
+
+df_schools <- school_grades %>% filter(df_flag, district_name == "HILLSBOROUGH")
+
+```
+
+# Introduction
+
+Thirty-two schools in Hillsborogh County School District scored a D or F on recent statewide assessments of student performance. Twenty-eight schools were elementary schools and four were middle schools.
+
+In this memo, we address what contributing factors might have contributed to the 32 schools' poor performance.
+
+# Retention
+
+All but three D/F schools in Hillsborough have retention rates below the district-wide average of 69.5%. (The average retention rate for elementary schools in the district is 68.7%)
+
+```{r students retention, echo = F}
+retention <- read_csv('data/InOutReports/stay_diversion_rates.csv', show_col_type=F)
+summary(rentention %>% filter(current_placement == "Stay"))
+retention %>% 
+  mutate(zoned_school = zoned_school_name %>% str_remove(" SCHOOL"),
+         df_flag = zoned_school %in% str_remove(df_schools$school_name," SCHOOL")) %>% 
+  filter(current_placement == "Stay",
+         df_flag) %>%
+  arrange(share_diverted) %>% 
+  ggplot +
+  geom_col(aes(x = reorder(zoned_school, -share_diverted),
+               y = share_diverted),
+           fill = "lightblue") + 
+  geom_hline(yintercept = .6948) + 
+    coord_flip() + 
+  labs(title = "All but three D/F schools in Hillsborough have stay rates below\nthe district average",
+       caption = "In/Out data does not include Just Elementary or Lockhart Elementary") + 
+  xlab("School") + 
+  ylab("Stay Rate")
+```
+
+Seven of the 12 schools with the lowest stay rates were D/F schools.
+
+Schools that scored above a D but still had low stay rates tended to have below average English and math scores. McLane Middle School, which scored a C, had a stay rate of 34.5%. Nearly 80% of McLane students had English scored below grade level and 60% has math scores below grade level.
+
+NOTE - Schools of hope - IDEA schools in Hillsborough - Robles and Oak Park
+
+```{r low stay rate schools performed worse, echo = F}
+retention_joined <- retention %>% 
+  mutate(zoned_school_name = str_remove_all(zoned_school_name, " SCHOOL| MAGNET")) %>%
+  left_join(school_grades %>% 
+              mutate(school_name = school_name %>% 
+                       str_remove_all(" School| SCHOOL| MAGNET| Magnet")) %>% 
+              select(school_name, 
+                     grade_2023 = informational_baseline_grade_2023, 
+                     english = english_language_arts_achievement, 
+                     math = mathematics_achievement),
+            by = c("zoned_school_name" = "school_name")) %>% 
+  arrange(share_diverted)
+
+retention_joined %>% 
+    filter(current_placement == "Stay",
+         share_diverted < .5) %>% 
+  rename(share_stayed = share_diverted) %>% 
+  select(-current_placement)
+```
+
+About one-third of students who leave a D/F school opt to attend a charter school, on average. Roughly one-quarter go to magnet schools and another 20% use a school choice option.
+
+```{r where are students going, echo = F}
+retention %>% 
+  mutate(zoned_school = zoned_school_name %>% str_remove(" SCHOOL"),
+         df_flag = zoned_school %in% str_remove(df_schools$school_name," SCHOOL")) %>% 
+  filter(current_placement != "Stay",
+         df_flag) %>%
+  group_by(zoned_school) %>% 
+  mutate(share = share_diverted/sum(share_diverted),
+         sum_helper = max(share * (current_placement == "Charter"), na.rm = T)) %>% 
+  ungroup() %>% 
+  group_by(current_placement) %>% 
+  mutate(mean_share_by_placement = mean(share, na.rm = T)) %>% 
+  ggplot +
+  geom_col(aes(x = reorder(zoned_school, sum_helper),
+               y = share, 
+               fill = current_placement)) + 
+    coord_flip() + 
+  labs(title = "More than one-third of students who left a D/F school\nopted for a charter school, on average",
+       caption = "In/Out data does not include Just Elementary or Lockhart Elementary") + 
+  xlab("School") + 
+  ylab("Stay Rate")
+```
+
+*What's next* \* Is this pattern persistent over years? \* Is this actually indication of "brain drain?" Who would be in a position to weigh in?
+
+*School Discipline*
+
+A number of teachers told Marlene that school discipline was among the largest hurdles they faced as teachers.
+
+Florida collects discipline data broken down of incident type (SESIR). Marlene and I have discussed in the past that, since this data is self-reported, it can be unreliable.
+
+On average, D and F schools did have a higher number of incidents per student in the 2021-22 school year. But the top five schools for incidents per student were all non-D/F schools.
+
+```{r SESIR data, include = F}
+nces_population <- read_xls("data/nces/ncesdata_294E6233_hillsborough.xls",
+                            skip = 14) %>% 
+  janitor::clean_names() %>% 
+  mutate(dist_number = state_school_id %>% str_extract("-[0-9]{2}-") %>% 
+           str_remove_all("-") %>% as.numeric,
+         sch_number = state_school_id %>% str_extract("-[0-9]*$") %>% 
+           str_remove_all("-") %>% as.numeric)
+
+sesir <- read_xls("data/fldoe/sesir2122a-h.xls",
+                   sheet = "Schools",
+                   skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(dist_number == 29)
+
+disc_per_cap <- sesir %>% 
+  left_join(nces_population %>% select(dist_number, sch_number, school_name, students, teachers), by = c("dist_number", "sch_number")) %>% 
+  mutate(students_n = as.numeric(students), 
+         teachers_n = as.numeric(teachers),
+         incidents_per_cap = total_incidents/students_n, 
+         incidents_leo_per_cap = incidents_reported_to_law_enforcement/students_n,
+         df_school = sch_number %in% as.numeric(df_schools$school_number))
+
+disc_per_cap %>% filter(type_of_incident == "SCHOOL TOTAL",
+                        sch_number %in% as.numeric(school_grades$school_number)) %>% 
+  select(school_name.x, sch_number, df_school, total_incidents, incidents_per_cap, incidents_leo_per_cap) %>% 
+  arrange(desc(incidents_per_cap))
+
+disc_per_cap %>% 
+  filter(type_of_incident == "SCHOOL TOTAL",
+         sch_number %in% as.numeric(school_grades$school_number)) %>% 
+  group_by(df_school) %>% 
+  summarise(ave_incident_per_cap = mean(incidents_per_cap),
+            ave_incident_leo_per_cap = mean(incidents_leo_per_cap))
+
+
+  
+```
+*Tenure of teachers*
+_Note: The latest hire date in the staffing data is 9/26/22. Therefore I use this as the "as of" date for tenure and age._
+```{r tenure of teachers, include = F}
+
+df_schools_lower <- df_schools$school_name[which(df_schools$df_flag == T)] %>% 
+  str_remove(" SCHOOL") %>% 
+  tolower()
+
+hills_teachers <- read_csv('data/hillsborough_district/Copy of HCPS Data-09202022 for D_F story-All teachers.csv') %>% 
+  janitor::clean_names() %>% 
+  mutate(tenure = mdy('09-26-2022') - mdy(adj_hire_date),
+         tenure_le2yr = tenure <= 365.25*2,
+         age = mdy('09-26-2022') - mdy(birthdate),
+         age_le30yr = age <= 365.25*30,
+         df_school = (tolower(site_name) %>% 
+           str_squish() %in% df_schools_lower) | site_number %in% c("1324","0041","0055","1482"))
+
+tenure_df <- hills_teachers %>% 
+  group_by(df_school) %>% 
+  summarise(ave_tenure = mean(tenure, na.rm = T) ,
+            ave_age = mean(age, na.rm = T),
+            share_tenure_le2yr = sum(tenure_le2yr, na.rm = T)/n(),
+            share_age_le30yr = sum(age_le30yr, na.rm = T)/n())
+
+```
+
+Schools that scored a "D" or "F" had less experienced staff, on average. 
+Teachers at D/F schools were 43 years old, on average, and had roughly 8.8 years of experience with the district. Teachers at schools that scored a "C" or above were 44.5 years old, on average, and had 11.7 years of experience with the district.
+
+Low performing schools had a much higher share of teachers with very little experience. One-quarter of teachers at D/F schools had less than 2 years of teacher experience in the district - double the share for better-performing schools.
+
+Low performing schools also had a much higher share of very young teachers. One in six teachers in D/F schools was under 30 at the start of the 22/23 school year. That's compared to one in nine at better performing schools.

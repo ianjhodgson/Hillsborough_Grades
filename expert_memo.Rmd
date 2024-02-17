@@ -1,0 +1,249 @@
+---
+title: "Hillsborough Schools - Expert Memo"
+author: "Ian Hodgson"
+date: "2024-02-17"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(knitr)
+
+rm(list = ls())
+
+# define tampa bay districts
+tampa_bay_districts = c("HILLSBOROUGH", "PINELLAS", "PASCO")
+
+```
+
+# Introduction
+
+# Student Demographics
+
+``` {r assessment data, include = F}
+# read in school grade data
+school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
+  filter(charter_school == "NO", 
+         alternative_ese_center_school == "N")
+
+df_schools <- school_grades %>% 
+  filter(district_name == "HILLSBOROUGH", 
+         informational_baseline_grade_2023 %in% c("D", "F")) %>% 
+  distinct(school_number, school_name)
+```
+
+## Higher share of low-income students.
+Students at low-performing schools tend to be poorer than those at high-achieving public schools. The average share of low-income students district-wide is 81%. At "A" schools the share is 40%, on averate. Every "D" and "F" school is 100% low-income.
+
+NOTE: The threshold for low-income is TK. The vast majority of "B" and "C" schools are also 100% low-income.
+
+``` {r income, include = T}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>% 
+  group_by(informational_baseline_grade_2023, 
+           type) %>% 
+  summarise(median_share_low_income = median(percent_of_economically_disadvantaged_students, na.rm = T))
+
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>%
+  summarise(median_income = median(percent_of_economically_disadvantaged_students, na.rm = T))
+
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>% 
+  rename(Grade = informational_baseline_grade_2023) %>% 
+  ggplot() + 
+  geom_point(aes(x = percent_of_economically_disadvantaged_students, 
+                 y = mathematics_achievement,
+                 col = Grade),
+             alpha = .6) +  
+  theme_minimal() + 
+  labs(title = "Low-performing schools had a higher share of poor students.",
+       subtitle = "TK") %>% 
+  print()
+```
+
+## Higher share of minority students.
+Roughly three-quarters of Hillsborough public school students are minority (Hispanic or non-white). At "D" schools, that share is 90% and at "F" schools 97%, on average. About half of students at "A" schools are minorities.
+
+NOTE - About 60% of Hillsborough residents under age 18 were minorities in 2022, according to the U.S. Census.
+
+``` {r minoriy students, incluide = F}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>%
+  group_by(informational_baseline_grade_2023) %>% 
+  summarise(mean_share_minority= mean(percent_of_minority_students, na.rm = T))
+
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 != "I") %>% 
+  rename(Grade = informational_baseline_grade_2023) %>% 
+  ggplot() + 
+  geom_point(aes(x = percent_of_minority_students, 
+                 y = mathematics_achievement,
+                 col = Grade),
+             alpha = .6) +  
+  theme_minimal() + 
+  labs(title = "Low-performing schools had a higher share of minority students.",
+       subtitle = "TK") %>% 
+  print()
+
+```
+
+
+NOTE - what does this look like for just Black students?
+
+## Students starting from behind.
+
+In the fall, the state assess kindergarten students to determine their starting point. This data indicates that students who arrive at poor performing schools are starting from further behind their peers at better performing schools. 
+
+At "A" schools, nearly 70% of kindergarten students arrive prepared. At "D" and "F" schools the rate is roughly 30%.
+
+``` {r K readiness, include = F}
+k_readiness <- read_xlsx('data/FLDOE/Fall22KFASTSchool.xlsx', skip = 3) %>% 
+  janitor::clean_names() %>% 
+  filter(district_name == "HILLSBOROUGH", 
+         school_number %in% school_grades$school_number[which(school_grades$district_name == "HILLSBOROUGH")]) %>% 
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, 
+                     informational_baseline_grade_2023,
+                     mathematics_achievement, 
+                     english_language_arts_achievement),
+            by = "school_number") %>% 
+  rename(Grade = informational_baseline_grade_2023) %>%
+  mutate(share_ready_for_kindergarten = percentage_ready_for_kindergarten_scoring_690_on_fast_star_early_literacy_assessment %>% as.numeric())
+
+k_readiness %>% 
+  group_by(Grade) %>% 
+  summarise(mean_readiness = mean(share_ready_for_kindergarten, na.rm = T))
+
+k_readiness %>% 
+  filter(Grade != "I") %>% 
+  ggplot() + 
+  geom_point(aes(x = share_ready_for_kindergarten, 
+                 y = mathematics_achievement,
+                 col = Grade),
+             alpha = .6) +  
+  theme_minimal() + 
+  labs(title = "Low-performing schools have a higher share of students who arrive not ready for kindergarten.",
+       subtitle = "TK")
+```
+
+# Teachers
+
+## Less experienced teachers
+
+During the 2022-23 school year, teachers at lower-performing schools were slightly younger and had less experience with Hillsborough County Schools than their peers at higher-achieving schools, on average. The differences are small, but statistically significant.
+
+The average teacher in "D" and "F" schools was 43 with 8.8 years of experience in Hillsborough. In other schools, the average teacher was 44 with 11.7 years of experience.
+
+Roughly one-quarter of teachers in "D" and "F" schools had less than 2 years in Hillsborough, compared to 14% at other schools.
+
+``` {r teacher tenure, include = F}
+df_schools_lower <- df_schools$school_name %>% 
+  str_remove(" SCHOOL") %>% 
+  tolower()
+
+hills_teachers <- read_csv('data/hillsborough_district/Copy of HCPS Data-09202022 for D_F story-All teachers.csv') %>% 
+  janitor::clean_names() %>% 
+  mutate(tenure = mdy('09-26-2022') - mdy(adj_hire_date),
+         tenure_le2yr = tenure <= 365.25*2,
+         age = mdy('09-26-2022') - mdy(birthdate),
+         age_le30yr = age <= 365.25*30,
+         df_school = (tolower(site_name) %>% 
+           str_squish() %in% df_schools_lower) | site_number %in% c("1324","0041","0055","1482"))
+
+tenure_df <- hills_teachers %>% 
+  group_by(df_school) %>% 
+  summarise(ave_tenure = mean(tenure, na.rm = T)/365.25 ,
+            ave_age = mean(age, na.rm = T)/365.25,
+            share_tenure_le2yr = sum(tenure_le2yr, na.rm = T)/n(),
+            share_age_le30yr = sum(age_le30yr, na.rm = T)/n())
+
+teacher_age_test <- t.test(hills_teachers$age[which(hills_teachers$df_school == T)],
+       hills_teachers$age[which(hills_teachers$df_school == F)],
+       alternative = "less")
+
+teacher_tenure_test <- t.test(hills_teachers$tenure[which(hills_teachers$df_school == T)],
+       hills_teachers$tenure[which(hills_teachers$df_school == F)],
+       alternative = "less")
+
+```
+
+## Higher reliance on substitute teachers
+
+Hillsborough district uses a private company to provide substitute teachers. We requested the invoices from the company, Kelly Substitutes.
+
+The invoices indicate that TK.
+
+## Higher reliance on "out of field" teachers
+
+Hillsborough district schools were required to inform parents when a teacher was covering a class they were not certified to teach. Of the roughly 1,200 out of field noticed sent out during the 2022-23 school year, roughly 20% were at "D" and "F" schools. Those schools represent roughly 9% of the student body.
+
+# School administration
+
+## High administration turnover. 
+
+TK of the "D" and "F" schools had a new principal during the 2022-23 school year.
+
+## Low stay rates.
+
+## School closures.
+
+## Schools are either too big to manage or too small to adapt.
+
+This R Markdown document is made interactive using Shiny. Unlike the more traditional workflow of creating static reports, you can now create documents that allow your readers to change the assumptions underlying your analysis and see the results immediately. 
+
+To learn more, see [Interactive Documents](http://rmarkdown.rstudio.com/authoring_shiny.html).
+
+## Inputs and Outputs
+
+You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change.  This demonstrates how a standard R plot can be made interactive by wrapping it in the Shiny `renderPlot` function. The `selectInput` and `sliderInput` functions create the input widgets used to drive the plot.
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+  selectInput("n_breaks", label = "Number of bins:",
+              choices = c(10, 20, 35, 50), selected = 20),
+  
+  sliderInput("bw_adjust", label = "Bandwidth adjustment:",
+              min = 0.2, max = 2, value = 1, step = 0.2)
+)
+
+renderPlot({
+  hist(faithful$eruptions, probability = TRUE, breaks = as.numeric(input$n_breaks),
+       xlab = "Duration (minutes)", main = "Geyser eruption duration")
+  
+  dens <- density(faithful$eruptions, adjust = input$bw_adjust)
+  lines(dens, col = "blue")
+})
+```
+
+## Embedded Application
+
+It's also possible to embed an entire Shiny application within an R Markdown document using the `shinyAppDir` function. This example embeds a Shiny application located in another directory:
+
+```{r tabsets, echo=FALSE}
+shinyAppDir(
+  system.file("examples/06_tabsets", package = "shiny"),
+  options = list(
+    width = "100%", height = 550
+  )
+)
+```
+
+Note the use of the `height` parameter to determine how much vertical space the embedded application should occupy.
+
+You can also use the `shinyApp` function to define an application inline rather then in an external directory.
+
+In all of R code chunks above the `echo = FALSE` attribute is used. This is to prevent the R code within the chunk from rendering in the document alongside the Shiny components.
+
+
+

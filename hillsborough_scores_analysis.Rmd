@@ -46,7 +46,7 @@ TK schools are inside Tampa city limits, TK are in TK...
 
 school_grades %>% 
   filter(district_name == "HILLSBOROUGH", 
-         informational_baseline_grade_2023 %in% c('A')) %>%
+         informational_baseline_grade_2023 %in% c('D', 'F')) %>%
   select(school_name, 
          grade_2023 = informational_baseline_grade_2023,
          ela_score = english_language_arts_achievement, 
