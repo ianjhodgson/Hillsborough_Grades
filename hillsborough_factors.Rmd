@@ -32,7 +32,7 @@ All but three D/F schools in Hillsborough have retention rates below the distric
 
 ```{r students retention, echo = F}
 retention <- read_csv('data/InOutReports/stay_diversion_rates.csv', show_col_type=F)
-summary(rentention %>% filter(current_placement == "Stay"))
+summary(retention %>% filter(current_placement == "Stay"))
 retention %>% 
   mutate(zoned_school = zoned_school_name %>% str_remove(" SCHOOL"),
          df_flag = zoned_school %in% str_remove(df_schools$school_name," SCHOOL")) %>% 
