@@ -279,6 +279,58 @@ discipline_analysis %>%
 
 *Source: [FLDOE School Environmental Safety Incident Report (SESIR)](https://www.fldoe.org/safe-schools/discipline-data.stml)*
 
+Tampa Police Department data supports the finding that lower-performing schools tend to have more police-involved disciplinary incidents. Adams Middle School, which received a "D", had 31 calls for violent activity. Sligh Middle schools, also a "D", had 27 calls for drug possession - mostly marijuana.
+
+There were outliers, like Freedom High School, a "C" school that had 49 drug-related calls and 28 violence-related calls.
+
+``` {r police calls, include = T}
+enrollment_2223 <-read_xlsx("data/FLDOE/Enrollment/2223MembBySchoolByGrade.xlsx",
+                             sheet = 2,
+                             skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(district == "HILLSBOROUGH") %>% 
+  mutate(sch_number = as.numeric(school_number),
+         number_of_students = as.numeric(number_of_students)) %>% 
+  select(district, sch_number, number_of_students)
+
+tpd_calls_raw <- read_csv("data/police_reports/tampa_pd_calls_clean.csv") %>%
+  rename(school_name_check = school_name) 
+  
+tpd_calls <- tpd_calls_raw %>% 
+  group_by(school_number, synopsis_category) %>% 
+  summarise(calls = n()) %>% 
+  filter(synopsis_category != "other",
+         synopsis_category != "traffic") %>%
+  pivot_wider(names_from = 2, 
+              values_from = 3) %>%
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_name,
+                     school_number,
+                     grade = informational_baseline_grade_2023,
+                     math = mathematics_achievement, 
+                     english = english_language_arts_achievement,
+                     type), 
+            by = "school_number") %>% 
+  filter(!is.na(school_name), 
+         grade != "I") %>% 
+  arrange(desc(grade), school_name)
+
+tpd_calls %>%
+  ungroup() %>% 
+  mutate(sch_number = as.numeric(school_number)) %>% 
+  left_join(enrollment_2223 %>% select(sch_number, number_of_students),
+            by = "sch_number") %>% 
+  select(-school_number, -english, -math, -sch_number) %>% 
+  select(school_name, grade, students = number_of_students, drugs, violence, disturbance, theft, everything()) %>% 
+  gt(groupname_col = "type") %>% 
+  tab_header(title = "Police calls for Tampa public schools",
+             subtitle = "Tampa Police Department calls, categorized by synopsis type") %>% 
+  sub_missing()
+  
+
+```
+
 ### Student absenteeism
 
 Florida Department of Education records the share of students who are absent 21 days or more and who absent 10 percent of classes or more. Regardless of metric, low-performing schools have more than twice the share of students chronically absent, compared to "A" schools.

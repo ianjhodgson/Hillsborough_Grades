@@ -112,4 +112,29 @@ tpd_clean <- tpd_single %>% mutate(group = "singles") %>%
   bind_rows(tpd_synopsis_errors_fixed %>% mutate(group = "doubles_fixed")) %>% 
   mutate(synopsis_append = ifelse(is.na(synopsis_appended), synopsis, synopsis_appended)) %>% 
   select(-starts_with("check"), -validation_link) %>% 
+  mutate(location_alt = file_name %>% 
+           str_replace_all("_", " ") %>% 
+           str_remove_all("\\.csv$") %>% 
+           str_remove("Redacted"), 
+         location = ifelse(is.na(location), 
+                           location_alt, 
+                           location))
+
+## clean addresses - DO NOT RE-RUN -
+# write_csv(tpd_clean %>% distinct(file_name), "data/police_reports/temp/location_name_xwalk.csv", na = "")
+file_school_xwalk <- read_csv("data/police_reports/temp/location_name_xwalk.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(school_number = str_remove_all(school_number, "\\(|\\)"))
+
+## categorize call synopsis - DO NOT RE-RUN - 
+# write_csv(tpd_clean %>% distinct(synopsis_append, synopsis_appended), 
+#           "data/police_reports/temp/synopsis_categories.csv", na = "NA")
+synopsis_cats <- read_csv("data/police_reports/temp/synopsis_categories.csv") %>% 
+  janitor::clean_names()
+
+## write out cleaned file
+tpd_clean <- tpd_clean %>% 
+  left_join(file_school_xwalk, by = "file_name") %>% 
+  left_join(synopsis_cats, by = "synopsis_append") %>% 
+  filter(synopsis_category != "DELETE") %>% 
   write_csv("data/police_reports/tampa_pd_calls_clean.csv", na = "")
