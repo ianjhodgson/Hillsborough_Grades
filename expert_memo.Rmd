@@ -38,6 +38,12 @@ Our hope is to find experts in education research and policy to help give contex
 
 ## Student Demographics
 
+We hope to convey to readers that the students at the 32 D/F schools are starting from behind. The students were largely from lower-income families and did not receive adequate preparation for kindergarten. Once they arrive at school, they tend to have more discipline and attendance issues.
+
+The income and race gap in education outcomes in Hillsborough is nothing new. Stanford's [Educational Opportunity Project](https://edopportunity.org/explorer/#/chart/none/counties/avg/ses/all/8/27.98/-82.24/12057,27.983,-82.244), which looked at standardized test scores from 2008-09 through 2017-18, found that Black students were 1.38 grades behind their white peers in Hillsborough public schools (state average 1.16 years). Poor students were 0.94 grades behind their non-poor peers (state average 0.61 grades).
+
+However, the district knew all of these factors and have not provided the staffing or resources to adequately address the problem, according to teachers and administrators.
+
 ```{r assessment data, include = F}
 # read in school grade data
 school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
@@ -75,27 +81,31 @@ school_grades %>%
     subtitle = "Mean share of economically disadvantaged students, by school type and 2022-23 baseline grade."
   )
 
-school_grades %>% 
+temp <- school_grades %>% 
   filter(district_name == "HILLSBOROUGH",
          informational_baseline_grade_2023 != "I") %>% 
   rename(Grade = informational_baseline_grade_2023) %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_economically_disadvantaged_students, 
                  y = mathematics_achievement,
-                 col = Grade),
+                 col = Grade,
+                 label = school_name),
              alpha = .6) +  
   theme_minimal() + 
-  labs(title = "Low-performing schools had a higher share economically disadvantaged students")
+  labs(title = "Low-performing schools had a higher share economically disadvantaged students") + 
+  facet_wrap(facets = "type")
+plotly::ggplotly(temp)
 ```
 
 To-dos: 
+
 -   Pull median income for households zoned for each school.
 
 ### Higher share of minority students.
 
 Roughly three-quarters of Hillsborough public school students are minority (Hispanic or non-white). At "D" schools, that share is 90% and at "F" schools 97%, on average. About half of students at "A" schools are minorities.
 
-About 60% of Hillsborough residents under age 18 were minorities in 2022, according to the U.S. Census. This might suggest that white students were more likely to attend charter oor private schools in Hilldsborough.
+About 60% of Hillsborough residents under age 18 were minorities in 2022, according to the U.S. Census. This might suggest that white students were more likely to attend charter or private schools in Hillsborough.
 
 ```{r minoriy students, include = T}
 school_grades %>% 
@@ -115,23 +125,28 @@ school_grades %>%
     subtitle = "Mean share of minority students, by school type and 2022-23 baseline grade."
   )
 
-school_grades %>% 
+temp <- school_grades %>% 
   filter(district_name == "HILLSBOROUGH",
          informational_baseline_grade_2023 != "I") %>% 
   rename(Grade = informational_baseline_grade_2023) %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_minority_students, 
                  y = mathematics_achievement,
-                 col = Grade),
+                 col = Grade,
+                 label = school_name
+                 ),
              alpha = .6) +  
       geom_line(aes(x = percent_of_minority_students, 
                  y = mathematics_achievement),
               method = "lm", formula = y~x,
               col = "black", alpha = .5, linetype = "dashed", stat = "smooth") +
   theme_minimal() + 
-  labs(title = "Low-performing schools had a higher share of minority students")
+  labs(title = "Low-performing schools had a higher share of minority students") + 
+  facet_wrap(facets = "type")
+plotly::ggplotly(temp)
 
 ```
+
 
 To-dos:
 
@@ -174,23 +189,120 @@ k_readiness %>%
     subtitle = "Mean share of students ready for kindegarten, by 2022-23 baseline grade."
   )
 
-k_readiness %>% 
+temp <- k_readiness %>% 
   filter(Grade != "I") %>% 
   ggplot() + 
   geom_point(aes(x = share_ready_for_kindergarten, 
                  y = mathematics_achievement,
-                 col = Grade),
+                 col = Grade,
+                 label = school_name),
              alpha = .6) +  
     geom_line(aes(x = share_ready_for_kindergarten, 
                  y = mathematics_achievement),
               method = "lm", formula = y~x,
               col = "black", alpha = .5, linetype = "dashed", stat = "smooth") +
   theme_minimal() + 
-  labs(title = "Low-performing schools have a higher share of students who arrive not ready for kindergarten.",
+  labs(title = "Low-performing schools have a higher share of students\nwho arrive ill prepared for kindergarten.",
        subtitle = "TK")
+plotly::ggplotly(temp)
 ```
 
 ### Student discipline
+
+Teachers and principals at lower performing schools mentioned discipline issues again and again. What data is available supports their observation that students who attend lower-performing schools struggle with discipline more than students at higher-performing schools. We looked at three data sources: 
+
+-   FLDOE Student Discipline Data, which tracks discipline outcomes (e.g., in-school suspension, expulsion, physical restraint).
+
+-   FLDOE Student Environment Safety Incident Reporting (SESIR) Data, which tracks behavior by type (e.g., fighting, alcohol, harassment). 
+
+-   Police call data (Tampa Police Department)
+
+#### Discipline Data, 2022-23
+
+Adjusting for student population, lower-performing schools reported more disciplinary actions, on average. The disparity was largest for out-of-school suspensions and proportionate disparity was highest among younger children. Among elementary schools, "A" schools reported roughly one out-of-school suspension per 100 students in 2022-23. "D" elementary schools reported 5.4 and "F" schools reported 7.4.
+
+``` {r discipline, include = T}
+enrollment_2223 <-read_xlsx("data/FLDOE/Enrollment/2223MembBySchoolByGrade.xlsx",
+                             sheet = 2,
+                             skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(district == "HILLSBOROUGH") %>% 
+  mutate(sch_number = as.numeric(school_number),
+         number_of_students = as.numeric(number_of_students)) %>% 
+  select(district, sch_number, number_of_students)
+
+discipline <- read_xlsx('data/FLDOE/Discipline/2223DisciplineReport.xlsx',
+                        sheet = 2, 
+                        skip = 2,
+                        na = "*") %>% 
+  janitor::clean_names() %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  select(discipline_school_number, 
+         discipline_description, 
+         total) %>% 
+  mutate(total_char = ifelse(is.na(total), 
+                            "<10", 
+                            as.character(total))) %>%
+  full_join(school_grades %>% 
+              filter(district_name=="HILLSBOROUGH") %>% 
+              select(school_number, school_name) %>% 
+              mutate(discipline_school_number = as.numeric(school_number)))
+
+discipline %>% 
+  filter(school_number %in% df_schools$school_number) %>% 
+  select(school_name, discipline_description, total_char) %>%
+  pivot_wider(names_from = discipline_description, values_from = total_char) %>% 
+  gt() %>% 
+  tab_header(
+    title = "Discipline actions at low-performing schools"
+  ) %>% 
+  sub_missing() %>% 
+  opt_interactive()
+```
+  
+Racial disparities in suspension rates have been [extensively](https://publications.csba.org/california-school-news/april-2021/californias-black-students-suspended-at-far-higher-rates-than-their-peers/) [documented](https://ifstudies.org/blog/the-black-white-divide-in-suspensions-what-is-the-role-of-family) [nationwide](https://floridaphoenix.com/2021/07/30/discipline-of-minority-schoolchildren-in-fl-and-elsewhere-can-be-discriminatory-and-disturbing/), and some of this disparity between high- and low-performing schools may be a function of racial bias. A recent study from the [American Psychological Association](https://www.apa.org/news/press/releases/2021/10/black-students-harsh-discipline) highlights the recursive impact of punishment, self-perception and academic success.
+
+However, further analysis of racial disparity in discipline is beyond the scope of this project.
+
+``` {r discipline II, include = T}
+discipline_grid <- discipline %>%
+  expand(school_number, discipline_description) %>% 
+  left_join(discipline, by = c("school_number", "discipline_description")) %>% 
+  select(-school_name) %>% 
+  left_join(school_grades %>% filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, 
+                                     Grade = informational_baseline_grade_2023, 
+                                     school_name,
+                                     type), 
+            by = "school_number") %>% 
+  filter(!is.na(discipline_description)) %>% 
+  mutate(total_adj = case_when(
+    !is.na(total) ~ total,
+    !is.na(total_char) ~ 5, 
+    TRUE ~ 0
+  )) %>% 
+  mutate(sch_number = as.numeric(school_number)) %>% 
+  left_join(enrollment_2223 %>% select(-district), by = "sch_number") %>% 
+  mutate(total_adj_per_100 = total_adj/number_of_students*100)
+
+discipline_grid %>% 
+  group_by(Grade, type, discipline_description) %>% 
+  summarise(total_adj_per_100 = mean(total_adj_per_100)) %>% 
+  arrange(desc(total_adj_per_100)) %>% 
+  pivot_wider(values_from = total_adj_per_100, names_from = discipline_description) %>% 
+  ungroup() %>% 
+  filter(Grade != "I", !is.na(Grade)) %>% 
+  arrange(Grade) %>% 
+  gt(groupname_col = "type") %>% 
+  fmt_number(decimals = 1) %>% 
+  tab_header(
+    title = "Lower-performing schools reported a higher incidence of discipline actions",
+    subtitle = "Average number of disciple actions per 100 students, 2022-23") %>% 
+  tab_footnote("Note: Data is suppressed for values under 10. Suppressed values are assumed to equal five in this analysis. Missing values are assumed to equal zero.")
+  
+```
+
+#### Student Environment Safety Incident Reporting (SESIR) Data, 2021-22
 
 School discipline data indicates that low-performing schools experience substantially more behavioral issues than higher achieving schools, adjusted for students population and school type. This fits with anecdotal evidence from teachers and administrators who pointed to classroom disruptions as a major impediment to learning.
 
@@ -204,13 +316,13 @@ NOTES:
 
 -   This analysis relies on discipline data from the 2021-22 school year. Data for the 2022-23 school year is expected later this month.
 
--   A very simple regression analysis indicates that that low-performing schools are any more or less likely refer an incident to law enforcement. Likely a topic for further analysis once 2022-23 data is available.
+-   A very simple regression analysis indicates that that low-performing schools weren't any more or less likely refer an incident to law enforcement. Likely a topic for further analysis once 2022-23 data is available.
 
 -   Over the years we've heard that SESIR data can be unreliable, with some administrators encouraging staff not to report data.
 
--   The data includes some outliers with a large number of incidents. All of the outliers were middle schools, which received Bs or Cs. Greco Middle School, which received a C, reported 5 incidents for every 10 students in 2021-22. Giunta, Young, Jennings, McLane and Dowdell middle schools all reported more than 2 incidents per 100 students despite all earning a "C" grade.
+-   The data includes some outliers with a large number of incidents. All of the outliers were middle schools, which received Bs or Cs. Greco Middle School, which received a C, reported 5 incidents for every 10 students in 2021-22. Giunta, Young, Jennings, McLane and Dowdell middle schools all reported more than 2 incidents per 100 students despite all earning a "C" grade. We're unsure if this is due to school policy or underlying behavioral issues, or a combination of both.
 
-```{r discipline, include = T}
+```{r sesir, include = T}
 
 enrollment_2122 <- read_xlsx("data/FLDOE/Enrollment/2122MembBySchoolByGrade.xlsx",
                              sheet = 2,
@@ -221,7 +333,7 @@ enrollment_2122 <- read_xlsx("data/FLDOE/Enrollment/2122MembBySchoolByGrade.xlsx
          number_of_students = as.numeric(number_of_students)) %>% 
   select(district, sch_number, number_of_students)
 
-discipline <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls", 
+sesir <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls", 
                        sheet = 2, 
                        skip = 2) %>% 
   janitor::clean_names() %>% 
@@ -237,12 +349,12 @@ discipline <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls",
   filter(Grade != "I") %>% 
   left_join(enrollment_2122, by = c("district_name" = "district", "sch_number"))
 
-discipline_analysis = discipline %>% 
+sesir_analysis = sesir %>% 
   filter(type_of_incident == "SCHOOL TOTAL") %>% 
   mutate(incidents_per_cap = total_incidents/number_of_students,
          leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
 
-discipline_analysis %>% 
+sesir_analysis %>% 
   group_by(Grade, type) %>% 
   summarise(Schools = n(), 
             Incidents = mean(incidents_per_cap, na.rm = T)*100,
@@ -259,12 +371,13 @@ discipline_analysis %>%
 # lm(incidents_reported_to_law_enforcement ~ total_incidents + Grade + type, 
 #    data = discipline_analysis) %>% summary
 
-discipline_analysis %>% 
+temp <- sesir_analysis %>% 
   filter(incidents_per_cap < .2) %>% 
   ggplot() + 
   geom_point(aes(x = incidents_per_cap, 
                  y = mathematics_achievement,
-                 col = Grade),
+                 col = Grade,
+                 label = school_name),
              alpha = .6) +  
   geom_line(aes(x = incidents_per_cap, 
                  y = mathematics_achievement),
@@ -272,27 +385,24 @@ discipline_analysis %>%
               col = "black", alpha = .5, linetype = "dashed", stat = "smooth") + 
   theme_minimal() + 
   labs(title = "Low-performing schools had more discipline incidents",
-       subtitle = "SESIR, 2021-22")
-  
+       subtitle = "SESIR, 2021-22") + 
+  facet_wrap(facets = "type")
+plotly::ggplotly(temp)
 
 ```
 
 *Source: [FLDOE School Environmental Safety Incident Report (SESIR)](https://www.fldoe.org/safe-schools/discipline-data.stml)*
 
+
+#### Tampa Police Department calls, 2022-23
+
 Tampa Police Department data supports the finding that lower-performing schools tend to have more police-involved disciplinary incidents. Adams Middle School, which received a "D", had 31 calls for violent activity. Sligh Middle schools, also a "D", had 27 calls for drug possession - mostly marijuana.
 
 There were outliers, like Freedom High School, a "C" school that had 49 drug-related calls and 28 violence-related calls.
 
-``` {r police calls, include = T}
-enrollment_2223 <-read_xlsx("data/FLDOE/Enrollment/2223MembBySchoolByGrade.xlsx",
-                             sheet = 2,
-                             skip = 2) %>% 
-  janitor::clean_names() %>% 
-  filter(district == "HILLSBOROUGH") %>% 
-  mutate(sch_number = as.numeric(school_number),
-         number_of_students = as.numeric(number_of_students)) %>% 
-  select(district, sch_number, number_of_students)
+Again, it's unclear whether this is driven by school policy or actually reflective of underlying behavioral issues, or a combination of both.
 
+``` {r police calls, include = T}
 tpd_calls_raw <- read_csv("data/police_reports/tampa_pd_calls_clean.csv") %>%
   rename(school_name_check = school_name) 
   
@@ -368,11 +478,12 @@ absent %>%
   )
 
 
-absent %>% 
+temp <- absent %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_students_absent_21_or_more_days, 
                  y = mathematics_achievement,
-                 col = Grade),
+                 col = Grade,
+                 label = school_name),
              alpha = .6) +  
   geom_line(aes(x = percent_of_students_absent_21_or_more_days, 
                  y = mathematics_achievement),
@@ -380,7 +491,9 @@ absent %>%
               col = "black", alpha = .5, linetype = "dashed", stat = "smooth") + 
   theme_minimal() + 
   labs(title = "Low-performing schools have higher absenteeism rates",
-       subtitle = "Share of students missing 21 days or more, 2022-23.\nThe relationship holds regardless of absenteeism metric used.")
+       subtitle = "Share of students missing 21 days or more, 2022-23.\nThe relationship holds regardless of absenteeism metric used.") + 
+  facet_wrap(facets = "type")
+plotly::ggplotly(temp)
 ```
 
 To-dos:
@@ -393,13 +506,17 @@ To-dos:
 
 ## Teachers
 
+Teachers and administrators mentioned again and again that lower-performing schools lack experienced and consistent staff necessary to address learning and behavioral issues. The numbers confirm that teachers at lower-performing schools tend to be younger and more likely to be teaching a subject they are not certified in.
+
+It also appears that turnover is higher at lower-performing schools (analysis in progress.)
+
 ### Less experienced teachers
 
 During the 2022-23 school year, teachers at lower-performing schools were slightly younger and had less experience with Hillsborough County Schools than their peers at higher-achieving schools, on average. The differences are small, but statistically significant.
 
 The average teacher in "D" and "F" schools was 43 with 8.8 years of experience in Hillsborough. In other schools, the average teacher was 44 with 11.7 years of experience.
 
-Roughly one-quarter of teachers in "D" and "F" schools had less than 2 years in Hillsborough, compared to 14% at other schools.
+While 19% of teachers at "A" schools had less than three years of experience, that share was over 30% at "D" and "F" schools.
 
 ```{r teacher tenure, include = T}
 df_schools_lower <- df_schools$school_name %>% 
@@ -409,7 +526,7 @@ df_schools_lower <- df_schools$school_name %>%
 hills_teachers <- read_csv('data/hillsborough_district/Copy of HCPS Data-09202022 for D_F story-All teachers.csv') %>% 
   janitor::clean_names() %>% 
   mutate(tenure = mdy('09-26-2022') - mdy(adj_hire_date),
-         tenure_le2yr = tenure <= 365.25*2,
+         tenure_le3yr = tenure <= 365.25*3,
          age = mdy('09-26-2022') - mdy(birthdate),
          age_le30yr = age <= 365.25*30,
          df_school = (tolower(site_name) %>% 
@@ -419,7 +536,7 @@ tenure_df <- hills_teachers %>%
   group_by(df_school) %>% 
   summarise(ave_tenure = mean(tenure, na.rm = T)/365.25 ,
             ave_age = mean(age, na.rm = T)/365.25,
-            share_tenure_le2yr = sum(tenure_le2yr, na.rm = T)/n(),
+            share_tenure_le3yr = sum(tenure_le3yr, na.rm = T)/n(),
             share_age_le30yr = sum(age_le30yr, na.rm = T)/n())
 
 teacher_age_test <- t.test(hills_teachers$age[which(hills_teachers$df_school == T)],
@@ -436,13 +553,184 @@ teacher_tenure_test <- t.test(hills_teachers$tenure[which(hills_teachers$df_scho
 
 ### Higher reliance on substitute teachers
 
-Administrators at lower-performing schools indicated that staffing shortages mean they frequently relied on substitute teachers. Hillsborough district uses a private company to provide substitute teachers. We requested the invoices from the company, Kelly Substitutes. **Analysis in progress.**
+Administrators at lower-performing schools indicated that staffing shortages mean they frequently relied on substitute teachers. Hillsborough district uses a private company to provide substitute teachers. Data from substitute-staffing firm Kelly Education, shows that lower-performing schools relied on substitutes more often than higher-performing schools, on average.
+
+``` {r substitutes, include = T}
+kelly_subs <- read_csv("data/kelly_subs_clean.csv") %>% 
+  mutate(school_number = str_extract(school, "[0-9]{4}"),
+         school_number_cln = case_when(
+           is.na(school_number) ~"0011",
+           school_number == "0155" ~ "0151", # Alonso
+           school_number == "0285" ~ "0281", # Blake, 
+           school_number == "0845" ~ "0842", # Dowdell
+           school_number == "1885" ~ "1881", # Hillsborough High 
+           school_number == "3785" ~ "3784", # Jefferson
+           school_number == "2245" ~ "2241", # King
+           school_number == "8256" ~ "2561", # Lutz
+           school_number == "3005" ~ "3004", # Middleton
+           school_number == "3735" ~ "3731", # Robinson
+           school_number == "1485" ~ "1482", # Sligh
+           school_number == "0094" ~ "0093", # Strawberry
+           school_number == "8068" ~ "0682", # Woodson
+           school_number == "4225" ~ "4221", # Tampa Bay Tech
+           T ~ school_number
+           ) %>% 
+           str_squish())
+
+kelly_subs_clean <- kelly_subs %>% 
+  mutate(date_clean = mdy(date)) %>% 
+  filter(date_clean >= mdy("8/10/2022"),
+         date_clean <= mdy("5/26/2023")) %>% 
+  group_by(school_number_cln) %>%
+  mutate(total_hours = reg_units_hrs + overtime_units_hrs,
+         days = ifelse(reg_units_hrs > 0, 1, -1)) %>% 
+  summarise(total_hours = sum(total_hours, na.rm = T),
+            total_days = sum(days)) %>%
+  ungroup %>% 
+  rename(school_number = school_number_cln) %>% 
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(district_name, school_name, school_number, Grade = informational_baseline_grade_2023, type),
+            by = "school_number") %>% 
+  mutate(sch_number = as.numeric(school_number)) %>% 
+  left_join(enrollment_2223, by = c("district_name" = "district", "sch_number")) %>% 
+  mutate(sub_days_per_100_students = total_days/number_of_students*100,
+         sub_hours_per_100_students = total_hours/number_of_students*100) %>% 
+  group_by(school_number) %>% 
+  mutate(count = n())
+
+kelly_subs_clean %>% 
+  filter(Grade != "I",
+         !is.na(Grade)) %>% 
+  group_by(Grade, type) %>% 
+  summarise(Schools = n(), 
+            `Substitute Days` = mean(sub_days_per_100_students),
+            `Substitute Hours` = mean(sub_hours_per_100_students)) %>% 
+  arrange(type, Grade) %>% 
+  ungroup %>% 
+  gt(groupname_col = "type") %>% 
+  fmt_number(columns = 4:5, decimals = 1) %>% 
+  tab_header(title = "Lower-performing schools relied on substitute teachers more than high-performing schools",
+             subtitle = "Average number of substitute teacher days and teacher hours per 100 students, 2022-23") %>% 
+  tab_footnote(footnote = "Note: Substitute days is defined as any day in which a substitute worked, regardless of number of hours.")
+  
+
+```
+
+Normalizing for the number of students, Elementary schools that scored a "D" or "F" relied on subs more than twice as often as "A" schools, on average. Middle schools that scored a "D" had 2.2 times the number of sub days and 2.4 times the number of sub hours than "A" schools.
+
+``` {r substitutes at D/F schools, include = T}
+kelly_subs_clean %>% 
+  filter(Grade %in% c("D", "F")) %>% 
+  select(School = school_name, 
+         Grade,
+         `Total sub days` = total_days, 
+         `Total sub hours` = total_hours,
+         `Sub days per 100` = sub_days_per_100_students, 
+         `Sub hours per 100` = sub_hours_per_100_students) %>% 
+  gt() %>% 
+  tab_header(title = "Substiute Days and Hours at D/F Schools") %>% 
+  fmt_number(decimals = 1) %>% 
+  opt_interactive()
+
+```
+
+Notes: 
+
+-   Magnet programs are identified with a different school number in the Kelly Education data. I combine substitute days and hours for regular and magnet programs at each school. 
+
+-   Some lines indicate a negative number of days worked and negative billed amount. I subtract these days and hours from the total count at each school.
 
 ### Higher reliance on "out of field" teachers
 
 Similar to substitute teachers, administrators said they were more likely to have teachers covering "out of field" that they were not certified to teach. Hillsborough district schools are required to inform parents when a teacher was covering a class they were not certified to teach.
 
 Of the roughly 1,200 out of field noticed sent out during the 2022-23 school year, roughly 20% were at "D" and "F" schools. Those schools represent roughly 9% of the student body.
+
+
+### Higher turnover rate among teachers
+
+Schools with higher turnover of teaching staff face are more unstable. Hillsborough's "D" and "F" schools lost 43% of instructional staff (teachers, coaches and counselors) from the 2021-22 school year to the 2022-23 school year, on average. It's a pattern that long preceded the low performance in 2022-23.
+
+``` {r teacher turnover at D/F schools, include = T}
+teacher_turnover <- read_csv("data/hillsborough_school_staff_turnover_rates.csv") %>% 
+  left_join(school_grades %>% filter(district_name == "HILLSBOROUGH"))
+
+teacher_turnover_2022_23 <- teacher_turnover %>% 
+  filter(comp_year == "2022-23") %>% 
+  select(school_number, 
+         School = school_name, 
+         Grade = informational_baseline_grade_2023, 
+         `Returning at least 3 years` = stay_rate_inv_3yr,
+         type,
+         mathematics_achievement)%>% 
+  left_join(teacher_turnover %>% 
+              filter(school_year == "2021-22") %>% 
+              select(school_number, 
+                     `Returning from previous year` = stay_rate_inv_1yr),
+            by = "school_number")
+
+
+
+teacher_turnover_2022_23 %>% 
+  filter(Grade %in% c("D", "F")) %>% 
+  select(-school_number, -type, -mathematics_achievement) %>% 
+  gt() %>% 
+  fmt_percent(decimals = 1) %>% 
+  tab_header(title = "Lower-performing schools struggled to retain teachers",
+             subtitle = "Percent of teaching staff in 2022-23 who taught in the same school for 1 and 3 years.") %>% 
+  opt_interactive()
+
+
+```
+
+On average, just two-thirds of teachers at "D" and "F" elementary schools in 2022-23 were teaching at the school the year before. That's compared to nearly 80% at "A" schools. 
+
+Roughly 42% of teachers at "D" and "F" elementary schools in 2022-23 had been teaching at the school for three years - since the 2019-20 school year. At "A" schools the rate was 66%.
+
+``` {r teacher retention averages, include = T}
+teacher_turnover_2022_23 %>% 
+  group_by(Grade, type) %>% 
+  filter(Grade != "I") %>% 
+  summarise(Schools = n(), 
+            `Returning at least 3 years` = mean(`Returning at least 3 years`, na.rm = T),
+            `Returning from previous year` = mean(`Returning from previous year`, na.rm = T)) %>% 
+  arrange(type, Grade) %>% 
+  ungroup %>% 
+  gt(groupname_col = "type") %>% 
+  tab_header(title = "Lower performing schools experienced more staff turnover, on average",
+             subtitle = "Share of staff returning during the 2022-23 school year.") %>% 
+  fmt_percent(columns = 4:5, 
+              decimals = 1)
+```
+
+There is a relationship between student performance and teacher stability. The relationship is slightly stronger for three-year stability than one-year. There are schools that buck the trend. Sheehy and Potter retained over 60% of staff over three years despite receiving an "F" grade.
+
+``` {r teacher turnover regression, include = T}
+temp <- teacher_turnover_2022_23 %>% 
+  filter(Grade != "I") %>% 
+  ggplot() + 
+  geom_jitter(aes(
+                 # x = `Returning from previous year`, 
+                 x = `Returning at least 3 years`,
+                 y = mathematics_achievement,
+                 col = Grade,
+                 label = School),
+             alpha = .6) +  
+  geom_line(aes(
+                 # x = `Returning from previous year`, 
+                 x = `Returning at least 3 years`,
+                 y = mathematics_achievement),
+              method = "lm", formula = y~x,
+              col = "black", alpha = .5, linetype = "dashed", stat = "smooth") + 
+  theme_minimal() + 
+  labs(title = "Low-performing schools had higher teacher turnover",
+       sub = "Share of teachers during the 2022-23 school year who taught at the same school three years prior.") + 
+  facet_wrap(facets = "type")
+plotly::ggplotly(temp)
+  
+
+```
 
 ------------------------------------------------------------------------
 
@@ -452,7 +740,7 @@ Of the roughly 1,200 out of field noticed sent out during the 2022-23 school yea
 
 Teachers and administrators told us that they struggle to keep higher-performing students. School stay rates support this conclusion. Elementary schools that got an "A" had stay rates of roughly 84%, on average. Those that received an "D" had a stay rate of 57% and those that had an "F" had a 61% stay rates.
 
-Teachers said that losing kids is demoralizing for the students and teachers who remain at the school, and reinforces the message that they are somehow failing. It's not clear from the assessment data whether students who opt out of their neighborhod school are higher performing than their peers.
+Teachers said that losing kids is demoralizing for the students and teachers who remain at the school, and reinforces the message that they are somehow failing. It's not clear from the assessment data whether students who opt out of their neighborhood school are higher performing than their peers.
 
 ``` {r retention, include = T}
 retention <- read_csv('data/InOutReports/stay_diversion_rates.csv', show_col_type=F)
@@ -513,7 +801,9 @@ retention %>%
 
 ### High administration turnover.
 
-We've heard that lower-performing schools tend to have high administration turnover. **Analysis in progress.**
+Nearly half of the 32 lower-performing schools had new principals at the start of the 2022-23 schools year. That year, 20 of the 32 principals had less than three years of experience in the role. 
+
+We've heard that these positions turnover rapidly and, while arguably the toughest and most important jobs in the district, are filled by people who do not yet have the experience required to succeed.
 
 ### School closures.
 
@@ -521,4 +811,57 @@ Some of the low-performing schools were set to close at the end of the 2022-23 o
 
 ### Schools are either too big to manage or too small to adapt.
 
-Principals at poor performing schools have complained that their schools are either too large to manage or too small to adapt to unforseen circumstances. Schools that are too large are more likely to suffer from behavioral issues, according to one principal. Schools that are too small can't find staff to cover a class or take on extra duties when a teacher is sick, goes on leave or leaves the school. **Analysis in progress.**
+Principals at poor performing schools have complained that their schools are either too large to manage or too small to adapt to unforeseen circumstances. 
+
+Schools that are too large are more likely to suffer from behavioral issues, according to one principal. 
+
+Schools that are too small can't find staff to cover a class or take on extra duties when a teacher is sick, goes on leave or leaves the school. 
+
+**Analysis in progress.**
+
+### Class sizes are too large
+
+Student-teacher ratio data from the National Center for Education Statistics does not indicate that lower-performing schools had a higher student-teacher ratio than better-performing schools. There may be other measures we should discuss here.
+
+Based on these simple averages, the average number of students do not exceed the maximum number of students per teacher set my [Florida Legislature in 2003](https://www.fldoe.org/finance/budget/class-size/).
+
+``` {r class sizes, include = T}
+
+nces_population <- read_xls("data/nces/ncesdata_294E6233_hillsborough.xls",
+                            skip = 14) %>% 
+  janitor::clean_names() %>% 
+    select(-school_name, -type) %>% 
+  mutate(school_number = str_extract(state_school_id, "[0-9]{4}$")) %>% 
+  left_join(school_grades %>% filter(district_name=="HILLSBOROUGH"),
+            by = "school_number") %>% 
+  filter(!is.na(informational_baseline_grade_2023))
+
+nces_population %>%
+  select(school_name,
+         Grade = informational_baseline_grade_2023,
+         student_teacher_ratio) %>% 
+  mutate(student_teacher_ratio = as.numeric(student_teacher_ratio)) %>% 
+  filter(Grade %in% c("D", "F")) %>% 
+  gt() %>% 
+  fmt_number(column = 3,decimals = 1) %>% 
+  opt_interactive()
+
+```
+
+
+```{r student teacher averages, include = T}
+nces_population %>%
+  select(school_name,
+         type,
+         Grade = informational_baseline_grade_2023,
+         student_teacher_ratio) %>% 
+  mutate(student_teacher_ratio = as.numeric(student_teacher_ratio)) %>% 
+  filter(Grade != "I") %>% 
+  group_by(type, Grade) %>% 
+  summarize(`Student to teacher ratio` = mean(student_teacher_ratio, na.rm = T)) %>% 
+  ungroup %>% 
+  gt(groupname_col = "type") %>% 
+  fmt_number(column = 3,decimals = 1)
+  
+
+```
