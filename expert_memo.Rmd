@@ -302,19 +302,17 @@ discipline_grid %>%
   
 ```
 
-#### Student Environment Safety Incident Reporting (SESIR) Data, 2021-22
+#### Student Environment Safety Incident Reporting (SESIR) Data, 2022-23
 
 School discipline data indicates that low-performing schools experience substantially more behavioral issues than higher achieving schools, adjusted for students population and school type. This fits with anecdotal evidence from teachers and administrators who pointed to classroom disruptions as a major impediment to learning.
 
-Elementary schools which received an "A" reported about 0.5 incidents per 100 students, on average, during the 2021-22 school year. Elementary schools that received a "D" reported 3 per 100 and those that received an "F" reported nearly 7 per 100.
+Elementary schools which received an "A" reported about 0.7 incidents per 100 students, on average, during the 2021-22 school year. Elementary schools that received a "D" reported 4.5 per 100 and those that received an "F" reported 9 per 100.
 
-The trend is similar when restricted to only incidents that were reported to law enforcement officers. "A" elementary schools reported 0.4 per 1,000 students, "D" and "F" schools reported roughly 3 per 1,000, on average.
+The trend is similar when restricted to only incidents that were reported to law enforcement officers. "A" elementary schools reported 0.1 incidents per 100 students, "D" and "F" schools reported roughly .5 per 100 students, on average.
 
 The pattern generally holds at middle, high and combination schools as well - with incidents per capita increasing as school grade falls.
 
 NOTES:
-
--   This analysis relies on discipline data from the 2021-22 school year. Data for the 2022-23 school year is expected later this month.
 
 -   A very simple regression analysis indicates that that low-performing schools weren't any more or less likely refer an incident to law enforcement. Likely a topic for further analysis once 2022-23 data is available.
 
@@ -333,7 +331,28 @@ enrollment_2122 <- read_xlsx("data/FLDOE/Enrollment/2122MembBySchoolByGrade.xlsx
          number_of_students = as.numeric(number_of_students)) %>% 
   select(district, sch_number, number_of_students)
 
-sesir <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls", 
+sesir <- read_xlsx("data/FLDOE/Discipline/sesir2223a-h.xlsx", 
+                       sheet = 2, 
+                       skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  left_join(school_grades %>% 
+              mutate(school_number = as.numeric(school_number)) %>%
+              select(district_name, school_number,
+                                     Grade = informational_baseline_grade_2023,
+                                     mathematics_achievement,
+                                     english_language_arts_achievement, 
+                     type),
+            by = c("district_name", "sch_number" = "school_number")) %>%
+  filter(Grade != "I") %>% 
+  left_join(enrollment_2223, by = c("district_name" = "district", "sch_number"))
+
+sesir_analysis = sesir %>% 
+  filter(incident_type == "SCHOOL TOTAL") %>% 
+  mutate(incidents_per_cap = total_incidents/number_of_students,
+         leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
+
+sesir_2122 <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls", 
                        sheet = 2, 
                        skip = 2) %>% 
   janitor::clean_names() %>% 
@@ -349,7 +368,7 @@ sesir <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls",
   filter(Grade != "I") %>% 
   left_join(enrollment_2122, by = c("district_name" = "district", "sch_number"))
 
-sesir_analysis = sesir %>% 
+sesir_2122_analysis <- sesir_2122 %>% 
   filter(type_of_incident == "SCHOOL TOTAL") %>% 
   mutate(incidents_per_cap = total_incidents/number_of_students,
          leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
