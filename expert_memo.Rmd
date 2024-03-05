@@ -884,3 +884,75 @@ nces_population %>%
   
 
 ```
+
+## Have test scores improved in 2023-24?
+
+In February, the district released PM2 results for the 2023-24 school year. We can compare the share of students who score a level 3 and up in 2023-24 to the shares the year before.
+
+Results are released by grade for math and English. I combine results for each subject across grades for each Hillsborough school. 
+
+``` {r PM2 scores analysis, include = T}
+pm2_results <- read_csv("data/FAST_2024/fast_2024_clean.csv") %>%
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, 
+                     Grade = informational_baseline_grade_2023, 
+                     math = mathematics_achievement, 
+                     english = english_language_arts_achievement,
+                     type),
+            by = "school_number") %>% 
+  filter(!is.na(Grade), Grade != "I") %>% 
+  mutate(subject = str_extract(exam, "Math|ELA$"))
+
+hills_average_change <- pm2_results %>% 
+  group_by(subject, type) %>% 
+  filter(!is.na(level3_plus_22_23), 
+         !is.na(level3_plus_23_24)) %>%
+  summarise(level3_plus_22_23 = weighted.mean(level3_plus_22_23, student_count_22_23),
+            level3_plus_23_24 = weighted.mean(level3_plus_23_24, student_count_23_24)) %>% 
+    mutate(level3_plus_change = (level3_plus_23_24-level3_plus_22_23)*100)
+
+temp <- hills_average_change %>% 
+              mutate(school_name = "District Average") %>% 
+  bind_rows(pm2_results %>% 
+  filter(Grade %in% c("D", "F")) %>%
+  group_by(school_name, subject, type) %>% 
+  summarise(level3_plus_22_23 = weighted.mean(level3_plus_22_23, student_count_22_23, na.rm = T),
+            level3_plus_23_24 = weighted.mean(level3_plus_23_24, student_count_23_24, na.rm = T)) %>% 
+  mutate(level3_plus_change = (level3_plus_23_24-level3_plus_22_23)*100) %>% 
+  select(school_name, type, subject, starts_with("level3_plus")) %>% 
+  arrange(level3_plus_change)) %>% 
+  arrange(type)
+  
+write_csv(temp, "data/FAST_2024/fast_2024_pm2_summary.csv", na = "")
+
+temp %>% filter(subject == "Math", 
+                type != "High") %>% 
+  ungroup() %>% 
+  select(school_name, everything()) %>% 
+  rename(`2022-23` = level3_plus_22_23, 
+         `2023-24` = level3_plus_23_24,
+         `Change (percentage points)` = level3_plus_change) %>% 
+  select(-subject) %>% 
+  gt(groupname_col = "type") %>% 
+  fmt_percent(columns = 3:4, decimals = 1) %>% 
+  fmt_number(columns = 5, decimals = 1) %>% 
+  sub_missing() %>% 
+  tab_header(title = "Math scores fell at the majority of D/F schools",
+             subtitle = "Share of students scoring level 3 and above on PM2 exams")
+
+temp %>% filter(subject == "ELA", 
+                type != "High") %>% 
+  ungroup() %>% 
+  select(school_name, everything()) %>% 
+  rename(`2022-23` = level3_plus_22_23, 
+         `2023-24` = level3_plus_23_24,
+         `Change (percentage points)` = level3_plus_change) %>% 
+  select(-subject) %>% 
+  gt(groupname_col = "type") %>% 
+  fmt_percent(columns = 3:4, decimals = 1) %>% 
+  fmt_number(columns = 5, decimals = 1) %>% 
+  sub_missing() %>% 
+  tab_header(title = "English scores were mixed at D/F schools, with roughly half improving and half falling",
+             subtitle = "Share of students scoring level 3 and above on PM2 exams")
+```

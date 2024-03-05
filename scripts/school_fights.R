@@ -56,11 +56,12 @@ type_totals <- sesir_join %>%
             incidents_leo = sum(incidents_reported_to_law_enforcement),
             students = sum(number_of_students)) %>% 
   mutate(incidents_per_100 = total_incidents/students*1000, 
-         leo_per_100 = incidents_leo/students*1000) %>% 
+         leo_per_100 = incidents_leo/students*1000, 
+         leo_rate = incidents_leo/total_incidents) %>% 
   arrange(incident_type)
 
 type_totals %>% 
   ggplot() + 
-  geom_point(aes(x = incidents_per_100, 
+  geom_point(aes(x = leo_rate, 
                  y = incident_type, 
                  col = school_year))
