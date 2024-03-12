@@ -47,6 +47,9 @@ However, the district knew all of these factors and have not provided the staffi
 ```{r assessment data, include = F}
 # read in school grade data
 school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
+  # NOTE Monroe Middle was changed late from an "I" for incomeplete to a "D" school.
+  mutate(informational_baseline_grade_2023 = ifelse(school_number == "2362", "D",
+                                                    informational_baseline_grade_2023)) %>% 
   filter(charter_school == "NO", 
          alternative_ese_center_school == "N")
 
@@ -126,8 +129,7 @@ school_grades %>%
   )
 
 temp <- school_grades %>% 
-  filter(district_name == "HILLSBOROUGH",
-         informational_baseline_grade_2023 != "I") %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
   rename(Grade = informational_baseline_grade_2023) %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_minority_students, 
@@ -557,6 +559,28 @@ tenure_df <- hills_teachers %>%
             ave_age = mean(age, na.rm = T)/365.25,
             share_tenure_le3yr = sum(tenure_le3yr, na.rm = T)/n(),
             share_age_le30yr = sum(age_le30yr, na.rm = T)/n())
+
+hills_teachers %>% 
+  filter(df_school == T) %>% 
+  group_by(site_name) %>% 
+  summarise(ave_tenure = mean(tenure, na.rm = T)/365.25,
+            ave_age = mean(age, na.rm = T)/365.25,
+            share_tenure_le3yr = sum(tenure_le3yr, na.rm = T)/n(),
+            share_age_le30yr = sum(age_le30yr, na.rm = T)/n()) %>% 
+  mutate(ave_tenure = round(ave_tenure, 1), 
+         ave_age = round(ave_age, 1)) %>% 
+bind_rows(hills_teachers %>% 
+            summarise(ave_tenure = mean(tenure, na.rm = T)/365.25,
+                      ave_age = mean(age, na.rm = T)/365.25,
+                      share_tenure_le3yr = sum(tenure_le3yr, na.rm = T)/n(),
+                      share_age_le30yr = sum(age_le30yr, na.rm = T)/n()) %>% 
+            mutate(ave_tenure = round(ave_tenure, 1), 
+                   ave_age = round(ave_age, 1), 
+                   site_name = "DISTRICT AVERAGE")
+            ) %>%  
+  gt() %>%
+  fmt_percent(columns = 4:5, decimals = 1) %>% 
+  opt_interactive()
 
 teacher_age_test <- t.test(hills_teachers$age[which(hills_teachers$df_school == T)],
        hills_teachers$age[which(hills_teachers$df_school == F)],
