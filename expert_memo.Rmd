@@ -794,6 +794,7 @@ retention_joined <- retention %>%
               mutate(school_name = school_name %>% 
                        str_remove_all(" School| SCHOOL| MAGNET| Magnet")) %>% 
               select(school_name, 
+                     school_number,
                      Grade = informational_baseline_grade_2023, 
                      english_language_arts_achievement, 
                      mathematics_achievement,
@@ -979,4 +980,62 @@ temp %>% filter(subject == "ELA",
   sub_missing() %>% 
   tab_header(title = "English scores were mixed at D/F schools, with roughly half improving and half falling",
              subtitle = "Share of students scoring level 3 and above on PM2 exams")
+```
+
+
+``` {r data export for Ron, include = F}
+
+child_poverty <- read_csv("data/child_poverty_rates.csv")
+
+ron_data <- school_grades %>%
+  filter(district_name == "HILLSBOROUGH",
+         informational_baseline_grade_2023 %in% c("D", "F")) %>% 
+  rename(grade = informational_baseline_grade_2023) %>% 
+  select(school_number, school_name, type, grade) %>% 
+  left_join(child_poverty %>% select(school_number, child_poverty_rate = pov_share), by = "school_number") %>% 
+  left_join(k_readiness %>% select(school_number, share_ready_for_kindergarten), by = "school_number") %>% 
+  left_join(retention_joined %>% 
+              filter(current_placement == "Stay") %>% 
+              mutate(share_that_leave = 1-share_diverted) %>% 
+              select(school_number, share_that_leave), 
+            by = "school_number") %>% 
+  left_join(hills_teachers %>% 
+              select(site_number, tenure_le3yr) %>% 
+              group_by(site_number) %>% 
+              summarise(share_tenure_le3yr = sum(tenure_le3yr)/n()),
+            by = c("school_number" = "site_number")) %>% 
+  mutate(school_number_num = as.numeric(school_number)) %>% 
+  left_join(absent %>% select(school_number, percent_of_students_absent_21_or_more_days), 
+            by = c("school_number_num" = "school_number")) %>% 
+  select(-school_number_num) %>% 
+  left_join(kelly_subs_clean %>% select(school_number, total_hours_taught_by_sub = total_hours)) %>% 
+  write_csv("data/report_card_data_for_ron.csv")
+  
+## D/F schools in top districts ----
+tot_enrollment_2223 <- read_xlsx("data/FLDOE/Enrollment/2223MembBySchoolByGrade.xlsx",
+                             sheet = 2,
+                             skip = 2) %>% 
+  janitor::clean_names()
+
+top_dist_tom <- school_grades %>% 
+  select(school_name, school_number, district_name, district_number, informational_baseline_grade_2023) %>% 
+  mutate(school_number_num = as.numeric(school_number),
+         district_number_num = as.numeric(district_number)) %>% 
+  left_join(tot_enrollment_2223, 
+            by = c("school_number_num" = "school_number",
+                   "district_number_num" = "district_number")) %>% 
+  mutate(flag_df = informational_baseline_grade_2023 %in% c("D", "F"),
+         students = as.numeric(number_of_students), 
+         students_df = students * flag_df) %>% 
+  group_by(district_name, district_number) %>% 
+  summarise(total_schools = n(),
+            df_schools = sum(flag_df),
+            total_students = sum(students, na.rm = T),
+            df_students = sum(students_df, na.rm = T)) %>% 
+  mutate(share_studets_in_df = df_students/total_students) %>% 
+  arrange(desc(total_students)) %>% 
+  write_csv("data/charts/df_schools_by_district.csv")
+  
+  
+
 ```
