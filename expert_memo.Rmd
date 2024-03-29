@@ -51,11 +51,14 @@ school_grades <- read_csv('data/schoolgrades23_linked.csv') %>%
   mutate(informational_baseline_grade_2023 = ifelse(school_number == "2362", "D",
                                                     informational_baseline_grade_2023)) %>% 
   filter(charter_school == "NO", 
-         alternative_ese_center_school == "N")
+         alternative_ese_center_school == "N") %>% 
+  ## SENSITIVITY CHECK
+  mutate(informational_baseline_grade_2023 = ifelse(informational_baseline_grade_2023 %in% c("D", "F"), "D/F", informational_baseline_grade_2023),
+         type = ifelse(type == "Combination", "Middle", type))
 
 df_schools <- school_grades %>% 
   filter(district_name == "HILLSBOROUGH", 
-         informational_baseline_grade_2023 %in% c("D", "F")) %>% 
+         informational_baseline_grade_2023 == "D/F") %>% 
   distinct(school_number, school_name)
 ```
 
@@ -350,7 +353,7 @@ sesir <- read_xlsx("data/FLDOE/Discipline/sesir2223a-h.xlsx",
   left_join(enrollment_2223, by = c("district_name" = "district", "sch_number"))
 
 sesir_analysis = sesir %>% 
-  filter(incident_type == "SCHOOL TOTAL") %>% 
+  # filter(incident_type == "SCHOOL TOTAL") %>% 
   mutate(incidents_per_cap = total_incidents/number_of_students,
          leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
 
@@ -376,13 +379,16 @@ sesir_2122_analysis <- sesir_2122 %>%
          leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
 
 sesir_analysis %>% 
+  ungroup() %>% 
+  filter(type != "High",
+         str_detect(incident_type, "FIGHT|ATTACK")) %>% 
   group_by(Grade, type) %>% 
   summarise(Schools = n(), 
             Incidents = mean(incidents_per_cap, na.rm = T)*100,
             `Incidents Reported to LEO` = mean(leo_incidents_per_cap, na.rm = T)*100) %>% 
-  arrange(type, Grade) %>% 
+  arrange(type) %>% 
   gt(groupname_col = "type") %>% 
-  fmt_number(c("Incidents", "Incidents Reported to LEO"), decimals = 1) %>% 
+  fmt_number(c("Incidents", "Incidents Reported to LEO"), decimals = 2) %>% 
   fmt_integer("Schools") %>% 
   tab_header(
     title = "Low-performing schools had more behavioral disruptions.",
@@ -515,6 +521,34 @@ temp <- absent %>%
        subtitle = "Share of students missing 21 days or more, 2022-23.\nThe relationship holds regardless of absenteeism metric used.") + 
   facet_wrap(facets = "type")
 plotly::ggplotly(temp)
+```
+
+```{r absenteeism pre-pandemic, include = T}
+absent_1819 <- read_xlsx('data/FLDOE/Absenteeism/1819ABS21Days10Comparison.xlsx', 
+                    sheet = 2, 
+                    skip = 2,
+                    na = "*") %>% 
+  janitor::clean_names() %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  select(school_number, district_number, school_name, 
+         percent_of_students_absent_21_or_more_days_1819 = percent_of_students_absent_21_or_more_days,
+         percent_of_students_absent_10_percent_or_more_1819 = percent_of_students_absent_10_percent_or_more)
+
+absent %>% 
+  left_join(absent_1819) %>% 
+  mutate(Grade = ifelse(Grade %in% c("D", "F"),
+                        "D/F", Grade),
+         type = ifelse(type == "Combination", "Middle", type)) %>% 
+  filter(type != "High") %>% 
+  mutate(diff_21_days = percent_of_students_absent_21_or_more_days - percent_of_students_absent_21_or_more_days_1819,
+         diff_10_days = percent_of_students_absent_10_percent_or_more - percent_of_students_absent_10_percent_or_more_1819) %>% 
+  group_by(type, Grade) %>% 
+  summarise(diff_21_days = mean(diff_21_days, na.rm = T),
+            diff_10_days = mean(diff_10_days, na.rm = T),
+            pct_10pct = mean(percent_of_students_absent_10_percent_or_more, na.rm = T),
+            pct_21days = mean(percent_of_students_absent_21_or_more_days, na.rm = T ),
+            pct_10pct_pre = mean(percent_of_students_absent_10_percent_or_more_1819, na.rm = T),
+            pct_21days_pre = mean(percent_of_students_absent_21_or_more_days_1819, na.rm = T ))
 ```
 
 To-dos:
@@ -716,7 +750,7 @@ teacher_turnover_2022_23 <- teacher_turnover %>%
 
 
 teacher_turnover_2022_23 %>% 
-  filter(Grade %in% c("D", "F")) %>% 
+  filter(Grade == "D/F") %>% 
   select(-school_number, -type, -mathematics_achievement) %>% 
   gt() %>% 
   fmt_percent(decimals = 1) %>% 
@@ -885,7 +919,7 @@ nces_population %>%
          Grade = informational_baseline_grade_2023,
          student_teacher_ratio) %>% 
   mutate(student_teacher_ratio = as.numeric(student_teacher_ratio)) %>% 
-  filter(Grade %in% c("D", "F")) %>% 
+  filter(Grade == "D/F") %>% 
   gt() %>% 
   fmt_number(column = 3,decimals = 1) %>% 
   opt_interactive()
@@ -940,7 +974,7 @@ hills_average_change <- pm2_results %>%
 temp <- hills_average_change %>% 
               mutate(school_name = "District Average") %>% 
   bind_rows(pm2_results %>% 
-  filter(Grade %in% c("D", "F")) %>%
+  filter(Grade =="D/F") %>%
   group_by(school_name, subject, type) %>% 
   summarise(level3_plus_22_23 = weighted.mean(level3_plus_22_23, student_count_22_23, na.rm = T),
             level3_plus_23_24 = weighted.mean(level3_plus_23_24, student_count_23_24, na.rm = T)) %>% 

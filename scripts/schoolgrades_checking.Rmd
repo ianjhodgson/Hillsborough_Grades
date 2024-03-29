@@ -1,0 +1,321 @@
+---
+title: "schoolgrades Checking"
+author: "Ian Hodgson"
+date: "2024-03-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F)
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(knitr)
+library(gt)
+knitr::opts_knit$set(root.dir = "/Users/ihodgson/Documents/GitHub/hillsborough_grades/")
+```
+
+```{r import and build necessary datasets. include = F}
+# School grades ----
+school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
+  # NOTE Monroe Middle was changed late from an "I" for incomeplete to a "D" school.
+  mutate(informational_baseline_grade_2023 = ifelse(school_number == "2362", "D",
+                                                    informational_baseline_grade_2023)) %>% 
+  filter(charter_school == "NO", 
+         alternative_ese_center_school == "N") %>% 
+  ## For most of these stats we want to consider D/F schools together and K-8 schools grouped with middle schools.
+  mutate(Grade = ifelse(informational_baseline_grade_2023 %in% c("D", "F"), "D/F", informational_baseline_grade_2023),
+         type_orig = type, 
+         type = ifelse(type == "Combination", "Middle", type))
+
+## Student populations ----
+enrollment_2223 <-read_xlsx("data/FLDOE/Enrollment/2223MembBySchoolByGrade.xlsx",
+                             sheet = 2,
+                             skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(district == "HILLSBOROUGH") %>% 
+  mutate(sch_number = as.numeric(school_number),
+         number_of_students = as.numeric(number_of_students)) %>% 
+  select(district, sch_number, number_of_students)
+
+```
+
+### As a result, 33 Hillsborough schools received a D or an F from the state in 2022-23 — by far the most among Florida’s 67 districts, and more than double its total the year before.
+
+Prior years' grades are reported in the 2022-23 grade data. I add up the number of D/F school for recent years. Note that 33 D/F schools is not that unusual for Hillsborough.
+
+*Source: Florida Department of Education*
+
+```{r school grades, include = T}
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH" | 
+           district_name == "MIAMI-DADE") %>%
+  group_by(district_name) %>% 
+  summarise(df_2023 = sum(informational_baseline_grade_2023 %in% c("D", "F")),
+            df_2022 = sum(grade_2022 %in% c("D", "F")),
+            df_2019 = sum(grade_2019 %in% c("D", "F")), 
+            df_2018 = sum(grade_2018 %in% c("D", "F")),
+            df_2017 = sum(grade_2017 %in% c("D", "F")),
+            df_2016 = sum(grade_2016 %in% c("D", "F")),
+            df_2015 = sum(informational_baseline_grade_2015 %in% c("D", "F")))
+
+```
+
+### Together those campuses serve the equivalent of a small city, with 18,000 kids.
+
+I use Florida Department of Education school enrollment data to calculate the total number of students in D/F schools. I join school grades and enrollment using school number.
+
+*Source: Florida Department of Education*
+
+```{r, include = F}
+school_grades %>% filter(Grade == "D/F") %>% 
+  filter(district_name == "HILLSBOROUGH") %>%
+  select(school_number, school_name, Grade) %>% 
+  mutate(sch_number = as.numeric(school_number)) %>% 
+  left_join(enrollment_2223, 
+            by = "sch_number") %>% summarise(number_of_students = sum(number_of_students))
+```
+
+### Roughly one in five teachers at Hillsborough’s A schools had less than three years’ experience in the district, the Times analysis found. At the D and F schools, it was nearly one in three.
+
+We got employee logs from Hillsborough County Public schools from the 2018-19 school year through 2023-24. The logs include the employee's name, age, role, school and date hired by the district.
+
+Using the employee's role, I identified instructional staff as anyone teaching an identifyable subject (e.g., Math or English), coaches and counselors.
+
+I used the hire date to determine how long the employee has been with the district.
+
+**UPDATE** Roughly **1-in-8** instructional staff at Hillsborough's A schools had less than three years' experience in the district, the Times analysis found. At D and F schools, it was nearly 1-in-3.
+
+```{r teacher experience, include = F}
+employee_rolls <- read_csv("data/hillsborough_employee_data_clean.csv") %>% 
+  filter(school_year == "2022-23") %>% 
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, Grade, type, mathematics_achievement)) %>% 
+  mutate(tenure = mdy('09-26-2022') - as.Date(adj_hire_date_cl),
+         tenure_le3yr = tenure <= 365.25*3,
+         age = mdy('09-26-2022') - as.Date(birthdate_cl),
+         age_le30yr = age <= 365.25*30)
+
+employee_rolls %>% 
+  group_by(Grade, type) %>% 
+  filter(type != "High") %>% 
+  summarise(share_tenue_le3yr = sum(tenure_le3yr)/n(),
+            share_age_le30yr = sum(age_le30yr)/n()) %>%
+  gt(groupname_col = "type") %>% 
+  fmt_percent(decimals = 1)
+```
+
+Chart:
+
+```{r, include = F}
+temp <- employee_rolls %>% 
+  group_by(site_name, Grade, type, mathematics_achievement) %>% 
+  summarise(share_under_3yr = sum(tenure_le3yr)/n()) %>% 
+  ggplot() + 
+  geom_point(aes(y = mathematics_achievement, 
+                 x = share_under_3yr,
+                 col = Grade,
+                 label = site_name)) + 
+  geom_line(aes(y = mathematics_achievement,
+                x = share_under_3yr),
+              method = "lm", formula = y~x,
+              col = "black", alpha = .5, linetype = "dashed", stat = "smooth") +
+  facet_wrap(facets = "type") + 
+  theme_minimal()
+plotly::ggplotly(temp)
+```
+
+**CHECK** - what share of teachers have been with the same school for less than three years?
+
+```{r teacher tenure check, include = F}
+employee_rolls_3yr <- employee_rolls %>% 
+  left_join(read_csv("data/hillsborough_employee_data_clean.csv") %>% 
+              filter(school_year == "2019-20") %>% 
+              select(school_number, employee, birthdate_cl) %>% 
+              mutate(present_3yr = T)) 
+
+employee_rolls_3yr %>% 
+  group_by(Grade, type) %>% 
+  filter(type != "High") %>% 
+  summarise(share_at_school_less_than_3yr = 1- sum(present_3yr, na.rm = T)/n()) %>%
+  gt(groupname_col = "type") %>% 
+  fmt_percent(decimals = 1)
+
+```
+
+Tenure data for the 33 schools:
+
+```{r, include = F}
+employee_rolls %>% 
+  left_join(employee_rolls_3yr) %>% 
+  filter(Grade == "D/F") %>% 
+  group_by(site_name) %>% 
+  summarise(District = sum(tenure_le3yr)/n(),
+            School = 1-sum(present_3yr, na.rm = T)/n(),
+            `Instructional Staff, 2022-23` = n()) %>% 
+  rename(`School Name` = site_name) %>% 
+  gt() %>% 
+  fmt_percent(column = 2:3, decimals = 1) %>% 
+  tab_header(
+    title = "More than one-third of teachers at D/F schools had been there for less than 3 years.",
+    subtitle = "Share of instructional staff with less than three years at...") %>% 
+  opt_interactive()
+  
+```
+
+### (The D and F schools) relied on substitute teachers twice as often as A schools during the 2022-23 academic year, according to invoices from Kelly Education, a staffing firm that supplies subs for Hillsborough.
+
+TK
+
+### CHANGE: Hillsborough schools have become more racially and economically segregated over time
+
+**Suggested revision:** 
+
+Families who opt out of poor-performing schools are more likely to be white, which helps make concentrate Black and Hispanic kids in D and F schools.
+
+``` {r out report by race, include = T}
+df_school_names <- school_grades$school_name[which(school_grades$Grade == "D/F" & 
+                                                     school_grades$district_name == "HILLSBOROUGH")] %>% 
+  str_remove_all("ELEMENTARY|MAGNET|MIDDLE|SCHOOL|K-8") %>% 
+  str_squish() %>% 
+  str_to_title()
+
+out_race <- read_csv("data/InOutReports/OutReports_Total.csv") %>% 
+  filter(current_placement != "total") %>% 
+  mutate(stay = current_placement == "Neighborhood",
+          zoned_school = zoned_school %>% 
+           str_remove_all("K-8") %>% 
+           str_squish) %>%
+  group_by(zoned_school, stay, current_placement) %>% 
+  # select(-current_placement) %>% 
+  summarise_all(sum) 
+
+out_race %>% 
+  ungroup() %>%
+  mutate(leave_white = white*(stay == F),
+         leave_black = black*(stay == F), 
+         df_school = zoned_school %in% df_school_names) %>% 
+  group_by(df_school) %>% 
+  summarise(total_white = sum(white),
+            total_leave_white = sum(leave_white),
+            total_black = sum(black),
+            total_leave_black = sum(leave_black)) %>% 
+  mutate(share_leave_white = total_leave_white/total_white, 
+         share_leave_black = total_leave_black/total_black)
+  
+
+
+```
+
+In 2022, Hillsborough was the 10th most segregated school district in the state by rate and ninth by income, as measured by the share of students receiving a free or reduced price lunch. It's a pattern that goes back over a decade.
+
+
+
+*Source: National Center for Education Statistics [Common Core Data](https://nces.ed.gov/ccd/files.asp#Fiscal:2,LevelId:7,SchoolYearId:27,Page:1)*
+
+``` {r segregation, include=T}
+sc12 <- read_csv("data/ccd/sc122a_FL.csv") %>% 
+  mutate(share_black = BLACK/MEMBER,
+         share_nonwhite = 1-WHITE/MEMBER) %>% 
+  filter(CHARTR == 2, TYPE == 1) %>% 
+  group_by(LEANM) %>% 
+  mutate(WHITE_TOT = sum(WHITE, na.rm = T),
+         BLACK_TOT = sum(BLACK, na.rm = T),
+         MEMBER_TOT = sum(MEMBER, na.rm = T),
+         NONWHITE_TOT = MEMBER_TOT - WHITE_TOT,
+         NONWHITE = MEMBER-WHITE,
+         ai_A = WHITE/WHITE_TOT, 
+         bi_B = NONWHITE/NONWHITE_TOT,
+         DI_score = abs(ai_A - bi_B),
+         #free and reduced lunch
+         nonfrl = MEMBER-TOTFRL,
+         ai_A_frl = TOTFRL/sum(TOTFRL), 
+         bi_B_frl = nonfrl/sum(nonfrl),
+         di_frl = abs(ai_A_frl - bi_B_frl)) %>% 
+  ungroup()
+
+disc12 <- sc12 %>% 
+  group_by(LEANM) %>% 
+  summarise(DI_score = sum(DI_score, na.rm = T)*.5,
+            DI_score_frl = sum(di_frl, na.rm = T)*.5)
+
+sc22 <- read_csv("data/ccd/ccd_sch_052_2223_l_1a_083023_FL.csv") %>% 
+  left_join(read_csv("data/ccd/ccd_sch_029_2223_w_1a_083023_FL.csv")) %>% 
+  filter(SCH_TYPE == 1, CHARTER_TEXT == "No")
+
+sc22_totals <- sc22 %>% 
+  filter(GRADE == "No Category Codes", 
+         RACE_ETHNICITY == "No Category Codes",
+         SEX == "No Category Codes") %>% 
+  select(ST_SCHID, SCHID, SCH_NAME, total_check = STUDENT_COUNT) %>% 
+  distinct()
+
+sc22_race <- sc22 %>% 
+  filter(GRADE != "No Category Codes", 
+         RACE_ETHNICITY != "No Category Codes",
+         SEX != "No Category Codes",
+         TOTAL_INDICATOR %>% str_detect("Category Set A")) %>% 
+  group_by(ST_SCHID, SCHID, SCH_NAME, RACE_ETHNICITY, LEA_NAME) %>% 
+  summarise(students = sum(STUDENT_COUNT)) %>% 
+  ungroup() %>% 
+  group_by(ST_SCHID, SCHID, SCH_NAME, LEA_NAME) %>% 
+  mutate(total = sum(students)) %>% 
+  left_join(sc22_totals) %>% 
+  ungroup()
+
+sc22_frl <- read_csv("data/ccd/ccd_sch_033_2223_l_1a_083023_FL.csv") %>% 
+  filter(LUNCH_PROGRAM == "No Category Codes") %>% 
+  select(SCH_NAME, ST_SCHID, SCHID, frl_students = STUDENT_COUNT) %>% 
+  distinct()
+
+disc22 <- sc22_race %>% 
+  filter(RACE_ETHNICITY == "White") %>% 
+  mutate(nonwhite = total-students) %>% 
+  left_join(sc22_frl) %>% 
+  group_by(LEA_NAME) %>% 
+  mutate(total_white = sum(students), 
+         total_nonwhite = sum(nonwhite),
+         ai_A = students/total_white, 
+         bi_B = nonwhite/total_nonwhite,
+         di = abs(ai_A-bi_B),
+         # free and reduced lunch
+         nonfrl = total - frl_students, 
+         ai_A_frl = frl_students/sum(frl_students, na.rm = T),
+         bi_B_frl = nonfrl/sum(nonfrl, na.rm = T),
+         di_frl = abs(ai_A_frl - bi_B_frl)) %>% 
+  summarise(DI_score = sum(di)*.5,
+            DI_score_frl = sum(di_frl, na.rm= T)*.5)
+
+disc22b <- sc22_race %>% 
+  filter(RACE_ETHNICITY == "Black or African American") %>% 
+  mutate(nonblack = total-students) %>% 
+  left_join(sc22_frl) %>% 
+  group_by(LEA_NAME) %>% 
+  mutate(total_black = sum(students), 
+         total_nonblack = sum(nonblack),
+         ai_A = students/total_black, 
+         bi_B = nonblack/total_nonblack,
+         di = abs(ai_A-bi_B),
+         # free and reduced lunch
+         nonfrl = total - frl_students, 
+         ai_A_frl = frl_students/sum(frl_students, na.rm = T),
+         bi_B_frl = nonfrl/sum(nonfrl, na.rm = T),
+         di_frl = abs(ai_A_frl - bi_B_frl)) %>% 
+  summarise(DI_score_black = sum(di)*.5,
+            DI_score_frl = sum(di_frl, na.rm= T)*.5)
+
+disc22 %>% 
+  rename(District = LEA_NAME, 
+         Race = DI_score, 
+         Income = DI_score_frl) %>% 
+  arrange(desc(Income)) %>% 
+  head(10) %>% 
+  gt() %>% 
+  fmt_number(decimals = 2) %>%
+  tab_header(title = "Hillsborough is among the most segregated schools districts in the state, by both race and income.",
+             subtitle = "A higher disparity index value indicates more segregation.") %>% 
+  tab_footnote(footnote = "Race measures the difference between white and non-white students. Income measures the difference between students who qualify for a free or reduced-price lunch and those who do not.")
+
+
+```

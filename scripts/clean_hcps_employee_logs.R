@@ -98,6 +98,8 @@ employee_data_clean <- employee_data_clean %>%
          adj_hire_date_cl = min(adj_hire_date, na.rm = T)) %>% 
   filter(school_number %in% school_grades_hills$school_number)
 
+write_csv(employee_data_clean, "data/hillsborough_employee_data_clean.csv")
+
 ## calculate year-over-year turnover rate
 years <- unique(employee_data_clean$school_year)
 year_schools <- employee_data_clean %>% 
@@ -189,12 +191,12 @@ check_rates <- left_join(stay_rates,
 
 write_csv(check_rates, "data/hillsborough_school_staff_turnover_rates.csv", na = "")
 
-stay_rates <- left_join(stay_rates, 
-                        school_grades_hills %>% 
-                          select(school_number, school_name, informational_baseline_grade_2023))
-
-employees_2018 <- unique(employee_data$employee[which(employee_data$school_year == "2018-19")])
-employees_2019 <- unique(employee_data$employee[which(employee_data$school_year == "2019-20")])
-new_eployees_2019 <- employees_2019[!(employees_2019 %in% employees_2018)]
+# stay_rates <- left_join(stay_rates, 
+#                         school_grades_hills %>% 
+#                           select(school_number, school_name, informational_baseline_grade_2023))
+# 
+# employees_2018 <- unique(employee_data$employee[which(employee_data$school_year == "2018-19")])
+# employees_2019 <- unique(employee_data$employee[which(employee_data$school_year == "2019-20")])
+# new_eployees_2019 <- employees_2019[!(employees_2019 %in% employees_2018)]
 
 
