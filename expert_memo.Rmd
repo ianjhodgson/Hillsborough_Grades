@@ -847,9 +847,7 @@ retention_joined %>%
   fmt_percent("Stay", decimals = 1) %>% 
   fmt_integer("Schools") %>% 
   tab_header(
-    title = "Students were more likely to opt out of attending lower-performing schools",
-    subtitle = "Mean stay rates, by school type and 2022-23 baseline grade.")
-
+    title = "Students were more likely to opt out of attending lower-performing schools.")
 
 ```
 
