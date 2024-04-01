@@ -483,6 +483,24 @@ sesir %>%
 Mean stay rates are calculated by dividing the number of students who attend their neighborhood school divided by the number zoned for that school. Comparisons include only elementary, middle and combination schools.
 
 ``` {r average stay rate}
+retention <- read_xlsx("data/InOutReports/Student Migration_ Out 2022-23.xlsx",
+                       sheet = 1) %>% 
+  janitor::clean_names() %>% 
+  filter(is.na(grade)) %>% 
+  mutate(school_number = str_extract(assigned_school_clean, "[0-9]{4}"),
+         assigned_school_clean = str_remove(assigned_school_clean, " \\([0-9]{4}\\)"),
+         current_school_clean = str_remove_all(current_school_clean, 
+                                               "Elementary|Middle|High|School|K-8") %>% 
+           str_squish(),
+         name_check = assigned_school_clean == current_school_clean) %>% 
+  group_by(assigned_school_clean) %>% 
+  mutate(at_least_one_name_match = max(name_check, na.rm = T))
+
+retention_check <- retention %>% 
+  filter(total_row == T) %>% 
+  group_by(assinged_school_clean) %>% 
+  mutate(assinged = max(total))
+
 retention <- read_csv('data/InOutReports/stay_diversion_rates.csv', show_col_type=F)
 
 retention_joined <- retention %>% 
