@@ -478,7 +478,9 @@ sesir %>%
 
 ```
 
-#### The average stay rate at Hillsborough’s A schools was 82% while at the D and F schools it was 58%.
+#### UPDATE: The average stay rate at Hillsborough’s A schools was 82% while at the D and F schools it was 58%.
+
+**NEW:** The average stay rate at Hillsborough’s A schools was **81%** while at the D and F schools it was **55%**.
 
 Mean stay rates are calculated by dividing the number of students who attend their neighborhood school divided by the number zoned for that school. Comparisons include only elementary, middle and combination schools.
 
@@ -488,81 +490,128 @@ retention <- read_xlsx("data/InOutReports/Student Migration_ Out 2022-23.xlsx",
   janitor::clean_names() %>% 
   filter(is.na(grade)) %>% 
   mutate(school_number = str_extract(assigned_school_clean, "[0-9]{4}"),
-         assigned_school_clean = str_remove(assigned_school_clean, " \\([0-9]{4}\\)"),
-         current_school_clean = str_remove_all(current_school_clean, 
-                                               "Elementary|Middle|High|School|K-8") %>% 
+         assigned_school_clean = str_remove(assigned_school_clean, " \\([0-9]{4}\\)") %>% 
+           str_remove_all("Elementary|Middle|High|School|K-8|Elem|Magnet") %>% 
+           str_replace_all("\\/", " ") %>% 
+           str_to_upper() %>% 
            str_squish(),
-         name_check = assigned_school_clean == current_school_clean) %>% 
+         current_school_clean = str_remove_all(current_school_clean, 
+                                               "Elementary|Middle|High|School|K-8|Magnet|Community") %>%
+             str_to_upper() %>% 
+           str_squish(),
+         name_check = assigned_school_clean == current_school_clean,
+         name_check = case_when(
+           name_check == T ~ T,
+           assigned_school_clean == "TOWN 'N' COUNTRY" & current_school_clean == "TOWN AND COUNTRY" ~ T,
+           assigned_school_clean == "SGT. SMITH" & current_school_clean == "SMITH" ~ T,
+           assigned_school_clean == "HUNTERS GREEN" & current_school_clean == "HUNTER'S GREEN" ~ T, 
+           assigned_school_clean == "WOODSON" & current_school_clean == "DR CARTER G WOODSON" ~ T,
+           assigned_school_clean == "SUMMERFIELD CROSSINGS" & current_school_clean == "SUMMERFIELD CROSSINGS ELEM" ~ T, 
+           assigned_school_clean == "DAWSON" & current_school_clean == "WARREN HOPE DAWSON" ~ T,
+           assigned_school_clean == "BRYAN" & current_school_clean == "BRYAN PLANT CITY" ~ T,
+           assigned_school_clean == "B. T. WASHINGTON" & current_school_clean == "BT WASHINGTON" ~ T,
+           T ~ F)) %>% 
   group_by(assigned_school_clean) %>% 
   mutate(at_least_one_name_match = max(name_check, na.rm = T))
 
 retention_check <- retention %>% 
   filter(total_row == T) %>% 
-  group_by(assinged_school_clean) %>% 
+  group_by(assigned_school_clean) %>% 
   mutate(assinged = max(total))
 
-retention <- read_csv('data/InOutReports/stay_diversion_rates.csv', show_col_type=F)
-
-retention_joined <- retention %>% 
-  mutate(zoned_school_name = str_remove_all(zoned_school_name, " SCHOOL|MAGNET|K-8") %>% 
-           str_squish) %>%
+retention_stay_leave <- retention %>% 
+  filter(!is.na(current_school_clean)) %>% 
+  group_by(name_check, assigned_school_clean, school_number) %>% 
+  summarise(students = sum(total, na.rm = T)) %>% 
+  left_join(retention %>% 
+              filter(is.na(placement_code_clean)) %>% 
+              select(school_number, total),
+            by = "school_number") %>% 
+  ungroup() %>% 
+  group_by(school_number) %>% 
+  mutate(share = students/total) %>% 
   left_join(school_grades %>% 
-              mutate(school_name = school_name %>% 
-                       str_remove_all(" School| SCHOOL| MAGNET| Magnet| K-8|SCHL") %>% 
-                       str_squish() %>% 
-                       str_replace("ELEM\\.", "ELEMENTARY"),
-                     school_name = case_when(
-                       school_name == "DR CARTER G WOODSON" ~ "WOODSON",
-                       school_name == "SERGEANT PAUL R SMITH MIDDLE" ~ "SMITH MIDDLE",
-                       school_name == "JULE F SUMNER HIGH" ~ "SUMNER HIGH",
-                       school_name == "BRYAN ELEMENTARY" ~ "BRYAN PLANT CITY ELEMENTARY",
-                       school_name == "CARROLLWOOD ELEMENTARY" ~ "CARROLLWOOD", 
-                       school_name == "TEMPLE TERRACE ELEMENTARY" ~ "TERRACE COMMUNITY",
-                       school_name == "TOWN & COUNTRY ELEMENTARY" ~ "TOWN AND COUNTRY ELEMENTARY",
-                       school_name == "SEMINOLE ELEMENTARY" ~ "SEMINOLE HEIGHTS ELEMENTARY",
-                       school_name == "WARREN HOPE DAWSON ELEMENTARY" ~ "DAWSON ELEMENTARY",
-                       school_name == "SUMMERFIELD CROSSINGS ELEMENTARY" ~ "SUMMERFIELD CROSSINGS ELEM",
-                       school_name == "CLAIR-MEL ELEMENTARY" ~ "CLAIR MEL ELEMENTARY",
-                       school_name == "COLLINS ELEMENTARY" ~ "COLLINS P",
-                       school_name == "TURNER-BARTELS" ~ "TURNER BARTELS",
-                       T ~ school_name)) %>% 
-              select(school_name, 
-                     school_number,
-                     Grade, 
-                     english_language_arts_achievement, 
-                     mathematics_achievement,
-                     type),
-            by = c("zoned_school_name" = "school_name")) %>% 
-  arrange(share_diverted)
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, Grade, school_name, type),
+            by = "school_number")
 
-retention_joined %>%
-  filter(current_placement == "Stay",
-         Grade != "I") %>% 
+retention_stay_leave %>% 
+  filter(name_check == T) %>% 
   group_by(Grade) %>% 
   filter(type != "High") %>% 
-  summarise(Schools = n(), 
-            Stay = mean(share_diverted, na.rm = T)) %>% 
-  arrange(Grade) %>% 
-
+  summarise(stay_rate = mean(share)) %>% 
   gt() %>% 
-  fmt_percent("Stay", decimals = 1) %>% 
-  fmt_integer("Schools") %>% 
-  tab_header(
-    title = "Students were more likely to opt out of attending lower-performing schools",
-    subtitle = "Mean stay rates, by school type and 2022-23 baseline grade.")
+  tab_header("Stay rates by school grade",
+             subtitle = "Elementary, combination and middle schools combined.") %>% 
+  fmt_percent(decimals = 1)
+
 ```
 
 #### But the impact is no less severe. Eisenhower Middle lost more than 1,000 students in its zone to charter schools in 2022-23.
 
 ``` {r eisenhower retention}
 
-read_csv("data/InOutReports/OutReports.csv") %>% 
-  filter(zoned_school %>% str_detect("Eisenhower")) %>% 
-  select(zoned_school, current_placement, grand_total) %>% 
-  group_by(current_placement) %>% 
-  summarise(students = sum(grand_total, na.rm = T)) %>% 
-  arrange(desc(students)) %>% 
+retention %>% 
+  filter(str_detect(assigned_school_clean, "EISENHOWER"),
+         name_check == F,
+         total_row == F) %>% 
+  group_by(placement_code_clean) %>% 
+  summarise(total = sum(total)) %>% 
   gt() %>% 
-  tab_headers("Eisenhower Middle lost nearly 969 students to charter last year.")
+  tab_header(title = "Eisenhower lost more than 1,000 students to charter",
+             subtitle = "Charter = 'P'")
+
+```
+
+``` {r retention by race, include = F}
+retention_race <- read_xlsx("data/InOutReports/Student Migration_ Out 2022-23.xlsx",
+                       sheet = 1) %>% 
+  janitor::clean_names() %>% 
+  filter(!is.na(grade)) %>% 
+  mutate(school_number = str_extract(assigned_school_clean, "[0-9]{4}"),
+         assigned_school_clean = str_remove(assigned_school_clean, " \\([0-9]{4}\\)") %>% 
+           str_remove_all("Elementary|Middle|High|School|K-8|Elem|Magnet") %>% 
+           str_replace_all("\\/", " ") %>% 
+           str_to_upper() %>% 
+           str_squish(),
+         current_school_clean = str_remove_all(current_school_clean, 
+                                               "Elementary|Middle|High|School|K-8|Magnet|Community") %>%
+             str_to_upper() %>% 
+           str_squish(),
+         name_check = assigned_school_clean == current_school_clean,
+         name_check = case_when(
+           name_check == T ~ T,
+           assigned_school_clean == "TOWN 'N' COUNTRY" & current_school_clean == "TOWN AND COUNTRY" ~ T,
+           assigned_school_clean == "SGT. SMITH" & current_school_clean == "SMITH" ~ T,
+           assigned_school_clean == "HUNTERS GREEN" & current_school_clean == "HUNTER'S GREEN" ~ T, 
+           assigned_school_clean == "WOODSON" & current_school_clean == "DR CARTER G WOODSON" ~ T,
+           assigned_school_clean == "SUMMERFIELD CROSSINGS" & current_school_clean == "SUMMERFIELD CROSSINGS ELEM" ~ T, 
+           assigned_school_clean == "DAWSON" & current_school_clean == "WARREN HOPE DAWSON" ~ T,
+           assigned_school_clean == "BRYAN" & current_school_clean == "BRYAN PLANT CITY" ~ T,
+           assigned_school_clean == "B. T. WASHINGTON" & current_school_clean == "BT WASHINGTON" ~ T,
+           T ~ F)) %>% 
+  group_by(assigned_school_clean) %>% 
+  mutate(at_least_one_name_match = max(name_check, na.rm = T),
+         placement_code_w_stay = ifelse(name_check == T, "Stay", placement_code_clean)) %>% 
+  group_by(school_number, assigned_school_clean, placement_code_w_stay) %>% 
+  summarise_at(7:13, sum) %>% 
+  left_join(school_grades %>% 
+              filter(district_name == "HILLSBOROUGH") %>% 
+              select(school_number, Grade))
+
+stay_white_black <- retention_race %>% 
+  ungroup() %>% 
+  group_by(assigned_school_clean) %>%
+  mutate(total_black = sum(african_american), 
+         share_black = african_american/total_black,
+         total_white = sum(caucasian), 
+         share_white = caucasian/total_white,
+         total_hispanic = sum(hispanic), 
+         share_hispanic = hispanic/sum(hispanic)) %>% 
+  filter(placement_code_w_stay == "Stay") %>% 
+  group_by(Grade) %>% 
+  summarise(white = mean(share_white), 
+            black = mean(share_black),
+            hispanic = mean(share_hispanic))
 
 ```
