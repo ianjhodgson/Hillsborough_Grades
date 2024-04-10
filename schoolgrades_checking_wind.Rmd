@@ -150,13 +150,15 @@ employee_rolls_3yr <- employee_rolls %>%
               mutate(present_1yr = T))
 
 employee_rolls_3yr %>% 
-  group_by(Grade) %>% 
+  group_by(Grade, site_name) %>% 
   filter(type != "High") %>% 
   summarise(share_at_school_less_than_3yr = 1- sum(present_3yr, na.rm = T)/n(),
-            share_at_school_less_than_1yr = 1- sum(present_1yr, na.rm = T)/n()) %>%
+            share_at_school_less_than_1yr = 1- sum(present_1yr, na.rm = T)/n(),
+            teachers = n()) %>%
   gt(groupname_col = "type") %>% 
   fmt_percent(decimals = 1) %>% 
-  tab_header("Teachers at D/F-rated are less experienced at their school.")
+  tab_header("Teachers at D/F-rated are less experienced at their school.") %>% 
+  opt_interactive()
 
 ```
 
@@ -165,7 +167,8 @@ Tenure data for the 33 schools:
 ```{r, include = T}
 employee_rolls %>% 
   left_join(employee_rolls_3yr) %>% 
-  filter(Grade == "A") %>%
+  # filter(Grade == "A") %>%
+  filter(type != "High") %>% 
   group_by(site_name, Grade) %>% 
   summarise(District = sum(tenure_le3yr)/n(),
             School = 1-sum(present_3yr, na.rm = T)/n(),
