@@ -374,9 +374,21 @@ sesir_2122 <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls",
   left_join(enrollment_2122, by = c("district_name" = "district", "sch_number"))
 
 sesir_2122_analysis <- sesir_2122 %>% 
-  filter(type_of_incident == "SCHOOL TOTAL") %>% 
+  # filter(type_of_incident == "SCHOOL TOTAL") %>% 
   mutate(incidents_per_cap = total_incidents/number_of_students,
          leo_incidents_per_cap = incidents_reported_to_law_enforcement/number_of_students)
+
+sesir_2122_analysis %>% 
+  ungroup() %>% 
+  filter(type == "Middle",
+         str_detect(type_of_incident, "FIGHT|ATTACK")) %>% 
+  group_by(school_name) %>% 
+  summarise(fights = sum(total_incidents), 
+            fights_percap = sum(incidents_per_cap)) %>% 
+  arrange(desc(fights_percap)) %>% 
+  ungroup() %>% 
+  summarise(fights = mean(fights),
+            fights_percap = mean(incidents_per_cap))
 
 sesir_analysis %>% 
   ungroup() %>% 
