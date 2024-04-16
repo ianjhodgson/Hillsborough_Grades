@@ -50,10 +50,10 @@ school_grades <- read_csv('data/schoolgrades23_linked.csv') %>%
   # NOTE Monroe Middle was changed late from an "I" for incomeplete to a "D" school.
   mutate(informational_baseline_grade_2023 = ifelse(school_number == "2362", "D",
                                                     informational_baseline_grade_2023)) %>% 
-  filter(charter_school == "NO", 
-         alternative_ese_center_school == "N") %>% 
+  filter(charter_school == "NO",
+         alternative_ese_center_school == "N") %>%
   ## SENSITIVITY CHECK
-  mutate(informational_baseline_grade_2023 = ifelse(informational_baseline_grade_2023 %in% c("D", "F"), "D/F", informational_baseline_grade_2023),
+  mutate(Grade = ifelse(informational_baseline_grade_2023 %in% c("D", "F"), "D/F", informational_baseline_grade_2023),
          type = ifelse(type == "Combination", "Middle", type))
 
 df_schools <- school_grades %>% 
@@ -344,7 +344,7 @@ sesir <- read_xlsx("data/FLDOE/Discipline/sesir2223a-h.xlsx",
   left_join(school_grades %>% 
               mutate(school_number = as.numeric(school_number)) %>%
               select(district_name, school_number,
-                                     Grade = informational_baseline_grade_2023,
+                                     Grade,
                                      mathematics_achievement,
                                      english_language_arts_achievement, 
                      type),
@@ -365,7 +365,7 @@ sesir_2122 <- read_xls("data/FLDOE/Discipline/sesir2122a-h.xls",
   left_join(school_grades %>% 
               mutate(school_number = as.numeric(school_number)) %>%
               select(district_name, school_number,
-                                     Grade = informational_baseline_grade_2023,
+                                     Grade,
                                      mathematics_achievement,
                                      english_language_arts_achievement, 
                      type),
@@ -388,14 +388,21 @@ sesir_2122_analysis %>%
   arrange(desc(fights_percap)) %>% 
   ungroup() %>% 
   summarise(fights = mean(fights),
-            fights_percap = mean(incidents_per_cap))
+            fights_percap = mean(fights_percap))
 
 sesir_analysis %>% 
   ungroup() %>% 
   filter(type != "High",
          str_detect(incident_type, "FIGHT|ATTACK")) %>% 
+  group_by(school_name, Grade, type) %>% 
+  summarise(total_incidents = sum(total_incidents),
+            incidents_per_cap = sum(incidents_per_cap),
+            leo_incidents_per_cap = sum(leo_incidents_per_cap)) %>% 
+  arrange(type, desc(total_incidents))
+%>% 
   group_by(Grade, type) %>% 
   summarise(Schools = n(), 
+            `Average Incidents` = mean(total_incidents),
             Incidents = mean(incidents_per_cap, na.rm = T)*100,
             `Incidents Reported to LEO` = mean(leo_incidents_per_cap, na.rm = T)*100) %>% 
   arrange(type) %>% 
@@ -406,6 +413,17 @@ sesir_analysis %>%
     title = "Low-performing schools had more behavioral disruptions.",
     subtitle = "Mean number of incidents per 100 students, by school type and 2022-23 baseline grade."
   )
+
+sesir_analysis %>% 
+  ungroup() %>% 
+  filter(type == "Middle",
+         str_detect(incident_type, "FIGHT|ATTACK")) %>% 
+  group_by(school_name) %>% 
+  summarise(Grade = first(Grade), 
+            `Total Incidents` = sum(total_incidents),
+            Incidents = sum(incidents_per_cap, na.rm = T)*100,
+            `Incidents Reported to LEO` = sum(leo_incidents_per_cap, na.rm = T)*100) %>% 
+  arrange(desc(`Total Incidents`))
   
 # lm(incidents_reported_to_law_enforcement ~ total_incidents + Grade + type, 
 #    data = discipline_analysis) %>% summary
@@ -496,7 +514,7 @@ absent <- read_xlsx('data/FLDOE/Absenteeism/2223ABS21Days10Comparison.xlsx',
   left_join(school_grades %>% 
               mutate(school_number = as.numeric(school_number)) %>%
               select(district_name, school_number,
-                                     Grade = informational_baseline_grade_2023,
+                                     Grade,
                                      mathematics_achievement,
                                      english_language_arts_achievement, 
                      type),
@@ -515,6 +533,11 @@ absent %>%
     title = "Low-performing schools had higher rates of absenteeism",
     subtitle = "Mean percent of students absent, by school type and 2022-23 baseline grade."
   )
+
+absent %>% 
+  filter(Grade == "D/F") %>% 
+  select(school_name, pct_10 = percent_of_students_absent_10_percent_or_more, days_21 = percent_of_students_absent_21_or_more_days) %>% 
+  arrange(desc(pct_10))
 
 
 temp <- absent %>% 
@@ -1080,6 +1103,40 @@ top_dist_tom <- school_grades %>%
   arrange(desc(total_students)) %>% 
   write_csv("data/charts/df_schools_by_district.csv")
   
+  
+
+```
+
+#### Spending per student
+On average, state and local spending is roughly equal to or higher at lower-performing schools than higher-achieving school. When federal dollars are included, combined spending was roughly \$1,000 higher at at D/F middle schools than A schools and \$2,700 higher at D/F elementary schools.
+
+``` {r spending, include = T}
+spending <- read_xlsx("data/FLDOE/ESSA22School-PerPupil-Expend.xlsx",
+                      skip = 4) %>% 
+  janitor::clean_names() %>% 
+    select(-school_name) %>%
+  full_join(school_grades)
+
+spending %>%
+  filter(district_name == "HILLSBOROUGH", 
+         !is.na(Grade),
+         type != "High") %>% 
+  group_by(Grade, type) %>% 
+  summarise(max = max(state_and_local_funds_5, na.rm = T),
+            min = min(state_and_local_funds_5, na.rm = T),
+            mean_sl = mean(state_and_local_funds_5, na.rm = T),
+            mean_slf = mean(state_local_and_federal_funds_7, na.rm = T)) %>% 
+  arrange(type, Grade)
+
+#### share failing
+school_grades %>% 
+  filter(type == "Elementary",
+         district_name == "HILLSBOROUGH",
+         Grade == "D/F") %>%  
+  mutate(number_failed_ese = number_of_students*english_language_arts_achievement/100,
+         number_failed_math = number_of_students_math*mathematics_achievement/100) %>% 
+  summarise(failed_math = sum(number_failed_math, na.rm = T)/sum(number_of_students_math, na.rm = T),
+            failed_engligh = sum(number_failed_ese, na.rm = T)/sum(number_of_students, na.rm = T))
   
 
 ```
