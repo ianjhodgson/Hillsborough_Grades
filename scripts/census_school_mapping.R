@@ -8,6 +8,7 @@ elem_zones <- st_read("data/shape files/Elementary") %>%
   mutate(district_area = st_area(.))
 middle_zones <- st_read("data/shape files/Middle") %>% 
   mutate(district_area = st_area(.))
+# combo_zones 
 school_grades <- read_csv('data/schoolgrades23_linked.csv') %>% 
   filter(charter_school == "NO", 
          alternative_ese_center_school == "N",
@@ -71,8 +72,8 @@ grades %>% filter(type == "Elementary" |
             mean_pov = mean(pov_share), 
             max_pov = max(pov_share))
 
-grades %>% filter(informational_baseline_grade_2023 %in% c("F", "D"), !is.na(pov_share)) %>% 
-  select(school_name, grade =informational_baseline_grade_2023, pov_share) %>% write_csv("data/child_poverty_rates.csv")
+# grades %>% filter(informational_baseline_grade_2023 %in% c("F", "D"), !is.na(pov_share)) %>% 
+#   select(school_name, grade =informational_baseline_grade_2023, pov_share) %>% write_csv("data/child_poverty_rates.csv")
 
 ### Middle ---- 
 intersect_pct_mid <- st_intersection(middle_zones, 
@@ -109,6 +110,9 @@ grades_mid <- school_grades %>% filter(district_name == "HILLSBOROUGH", type == 
   left_join(joined_mid %>% 
                                             select(school_number = MID, pov_share)) %>% 
   select(school_name, school_number, informational_baseline_grade_2023, type, pov_share)
+
+
+### Combination ----
 
 grades %>% filter(type == "Elementary", district_name == "HILLSBOROUGH") %>% 
   select(school_name, school_number, informational_baseline_grade_2023, type, pov_share) %>%

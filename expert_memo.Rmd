@@ -72,12 +72,13 @@ The Florida Department of Education defines students who received free or reduce
 school_grades %>% 
   filter(district_name == "HILLSBOROUGH",
          informational_baseline_grade_2023 != "I") %>% 
-  group_by(informational_baseline_grade_2023, 
+  group_by(Grade, 
            type) %>% 
   summarise(mean_share_low_income = mean(percent_of_economically_disadvantaged_students, na.rm = T)/100,
             Schools = n()) %>% 
-  select(type, informational_baseline_grade_2023, Schools, mean_share_low_income) %>% 
-  rename(Type = type, Grade = informational_baseline_grade_2023, `Share Low-Income` = mean_share_low_income) %>% 
+  select(type, Grade, Schools, mean_share_low_income) %>% 
+  rename(Type = type,
+         `Share Low-Income` = mean_share_low_income) %>% 
   arrange(Type, Grade) %>% 
   gt(groupname_col = "Type") %>% 
   fmt_percent(`Share Low-Income`, decimals = 1) %>% 
@@ -90,7 +91,6 @@ school_grades %>%
 temp <- school_grades %>% 
   filter(district_name == "HILLSBOROUGH",
          informational_baseline_grade_2023 != "I") %>% 
-  rename(Grade = informational_baseline_grade_2023) %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_economically_disadvantaged_students, 
                  y = mathematics_achievement,
@@ -120,7 +120,7 @@ school_grades %>%
   group_by(informational_baseline_grade_2023, type) %>% 
   summarise(Schools = n(), 
             mean_share_minority= mean(percent_of_minority_students, na.rm = T)/100) %>% 
-  rename(Grade = informational_baseline_grade_2023, 
+  rename( 
          Type = type, 
          `Share Minority` = mean_share_minority) %>% 
   gt(groupname_col = "Type") %>% 
@@ -133,7 +133,6 @@ school_grades %>%
 
 temp <- school_grades %>% 
   filter(district_name == "HILLSBOROUGH") %>% 
-  rename(Grade = informational_baseline_grade_2023) %>% 
   ggplot() + 
   geom_point(aes(x = percent_of_minority_students, 
                  y = mathematics_achievement,
@@ -173,12 +172,11 @@ k_readiness <- read_xlsx('data/FLDOE/Fall22KFASTSchool.xlsx', skip = 3) %>%
   left_join(school_grades %>% 
               filter(district_name == "HILLSBOROUGH") %>% 
               select(school_number, 
-                     informational_baseline_grade_2023,
-                     mathematics_achievement, 
+              Grade,
+              mathematics_achievement, 
                      english_language_arts_achievement, 
                      type),
             by = "school_number") %>% 
-  rename(Grade = informational_baseline_grade_2023) %>%
   mutate(share_ready_for_kindergarten = percentage_ready_for_kindergarten_scoring_690_on_fast_star_early_literacy_assessment %>% as.numeric())
 
 k_readiness %>% 
@@ -393,13 +391,13 @@ sesir_2122_analysis %>%
 sesir_analysis %>% 
   ungroup() %>% 
   filter(type != "High",
-         str_detect(incident_type, "FIGHT|ATTACK")) %>% 
+         # str_detect(incident_type, "FIGHT|ATTACK")
+         ) %>% 
   group_by(school_name, Grade, type) %>% 
   summarise(total_incidents = sum(total_incidents),
             incidents_per_cap = sum(incidents_per_cap),
             leo_incidents_per_cap = sum(leo_incidents_per_cap)) %>% 
-  arrange(type, desc(total_incidents))
-%>% 
+  arrange(type, desc(total_incidents)) %>% 
   group_by(Grade, type) %>% 
   summarise(Schools = n(), 
             `Average Incidents` = mean(total_incidents),
@@ -445,6 +443,83 @@ temp <- sesir_analysis %>%
        subtitle = "SESIR, 2021-22") + 
   facet_wrap(facets = "type")
 plotly::ggplotly(temp)
+
+
+### SESIR 2017-18
+enrollment_1819 <- read_xlsx("data/FLDOE/Enrollment/1819MembBySchoolByGrade.xlsx",
+                             sheet = 1,
+                             skip = 2) %>% 
+  janitor::clean_names() %>% 
+  filter(district == "HILLSBOROUGH") %>% 
+  mutate(sch_number = as.numeric(school_number),
+         number_of_students = as.numeric(number_of_students)) %>% 
+  select(district, sch_number, number_of_students)
+
+
+sesir_1819 <- read_xls("data/FLDOE/Discipline/sesir1819a-h.xls", 
+                       sheet = 1, 
+                       skip = 5) %>% 
+  janitor::clean_names() %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  left_join(school_grades %>% 
+              mutate(school_number = as.numeric(school_number)) %>%
+              select(district_name, school_number,
+                                     Grade,
+                                     mathematics_achievement,
+                                     english_language_arts_achievement, 
+                     type),
+            by = c("district_name", "school_number")) %>%
+  filter(Grade != "I") %>% 
+  left_join(enrollment_1819, by = c("district_name" = "district", "school_number" = "sch_number"))
+
+## Change in number of students
+school_grades %>% 
+  filter(district_name == "HILLSBOROUGH") %>% 
+  mutate(sch_number = as.numeric(school_number)) %>% 
+  left_join(enrollment_2223 %>% 
+              select(-district) %>% 
+              rename(students_2223 = number_of_students),
+            by = c("sch_number")) %>% 
+  left_join(enrollment_1718 %>% 
+              select(-district) %>% 
+              rename(students_1819 = number_of_students),
+            by = "sch_number") %>% 
+  filter(Grade == "D/F") %>% 
+  select(school_name, 
+         students_2223, 
+         students_1819) %>% 
+  arrange(school_name) %>% 
+  summarise(students_2223 = sum(students_2223),
+            students_1819 = sum(students_1819))
+
+## change in incidents 
+sesir_1819 %>% 
+  select(district_number, 
+         school_number, 
+         type_of_incident,
+         total_incidents, 
+         school_name, 
+         Grade) %>% 
+  mutate(year = 2019) %>% 
+  bind_rows(sesir %>%  
+              select(district_number = dist_number, 
+                     school_number = sch_number, 
+         type_of_incident = incident_type,
+         total_incidents, 
+         school_name, 
+         Grade
+         ) %>% 
+  mutate(year = 2023)) %>% 
+  # filter(type_of_incident %>% str_detect("SCHOOL TOTAL"),
+  #        Grade == "D/F") %>%
+    filter(type_of_incident %>% str_detect("FIGHT|ATTACK|THREAT"),
+           Grade == "D/F") %>%
+  group_by(year) %>% 
+  summarise(incidents = sum(total_incidents, na.rm = T))
+
+  
+    
+    
 
 ```
 
@@ -1056,8 +1131,7 @@ child_poverty <- read_csv("data/child_poverty_rates.csv")
 
 ron_data <- school_grades %>%
   filter(district_name == "HILLSBOROUGH",
-         informational_baseline_grade_2023 %in% c("D", "F")) %>% 
-  rename(grade = informational_baseline_grade_2023) %>% 
+         Grade == "D/F") %>% 
   select(school_number, school_name, type, grade) %>% 
   left_join(child_poverty %>% select(school_number, child_poverty_rate = pov_share), by = "school_number") %>% 
   left_join(k_readiness %>% select(school_number, share_ready_for_kindergarten), by = "school_number") %>% 
@@ -1140,3 +1214,35 @@ school_grades %>%
   
 
 ```
+
+
+### Data export for graphics
+
+Data for report card graphics, which include: 
+
+* Number of students
+
+* Share of inexperienced teachers
+
+* Total hours taught by sub
+
+* Students who leave
+
+* Childhood poverty rate
+
+``` {r data for graphics, include = F}
+scorecard_export <- school_grades %>% 
+  filter(district_name == "HILLSBOROUGH", 
+         Grade == "D/F") %>% 
+  select(school_number, 
+         school_name, 
+         informational_baseline_grade_2023) %>% 
+  left_join(enrollment_2223 %>% 
+              )
+
+```
+
+
+
+
+
