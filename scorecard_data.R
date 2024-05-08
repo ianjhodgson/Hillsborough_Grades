@@ -2,6 +2,7 @@ rm(list = ls())
 
 library(readxl)
 library(janitor)
+library(glue)
 library(tidyverse)
 
 ### SCHOOL GRADES ----
@@ -180,8 +181,9 @@ lunch_status <- read_xlsx("data/FLDOE/Lunch Status/2223FS3-Lunch-Status-School.x
   filter(district_name == "HILLSBOROUGH") %>% 
   mutate(free_lunch = frl_wo_usda_mult/as.numeric(number_of_students_denominator) %>% 
            round(3),
-         school_number = as.numeric(school_number)) %>% 
-  select(school_number, free_lunch)
+         school_number = as.numeric(school_number),
+         child_poverty = round(rate_with_multiplier_if_applicable, 3)) %>% 
+  select(school_number, child_poverty)
 
 ### Absenteeism ----
 absent <- read_xlsx('data/FLDOE/Absenteeism/2223ABS21Days10Comparison.xlsx', 
@@ -197,7 +199,7 @@ absent <- read_xlsx('data/FLDOE/Absenteeism/2223ABS21Days10Comparison.xlsx',
 scorecard <- school_grades %>% 
   mutate(school_number = as.numeric(school_number)) %>% 
   left_join(inexperienced) %>% 
-  left_join(kelly_subs_long_term) %>% 
+  left_join(kelly_subs_clean) %>% 
   left_join(retention_stay_leave) %>% 
   left_join(absent %>% 
               select(school_number, percent_of_students_absent_10_percent_or_more)) %>% 
@@ -232,8 +234,8 @@ scorecard_df <- scorecard %>%
 #### DATAWRAPPER ----
 # library(googledrive)
 # library(googlesheets4)
-drive_auth()
-gs4_auth()
+# drive_auth()
+# gs4_auth()
 
 library(DatawRappr)
 datawrapper_auth(api_key = "cpFLKz3GLUSCQ88HydLzLpmN7Vy7wV11920mRrkdQiexE1cvGOTOoxgNCqE2YWpI")
@@ -247,8 +249,8 @@ dw_data_template <- function(i) {
                   glue("Inexperienced teachers *(Average: {round(100*scorecard_df$inexperienced_teachers_ave[i])}%)*"),
                   glue("**{round(100*scorecard_df$inexperienced_teachers[i])}%**"),
                   #Substitutes
-                  glue("Time with substitutes *({round(100*scorecard_df$sub_hours_pct_ave[i])}%)*"),
-                  glue("**{round(100*scorecard_df$sub_hours_pct[i])}**%"),
+                  glue("Time with substitutes *({round(100*scorecard_df$share_days_with_sub_ave[i])}%)*"),
+                  glue("**{round(100*scorecard_df$share_days_with_sub[i])}%**"),
                   #Students leaving
                   glue("Zoned students choosing another school *({round(100*scorecard_df$students_who_leave_ave[i])}%)*"),
                   glue("**{round(100*scorecard_df$students_who_leave[i])}%**"),
@@ -256,77 +258,98 @@ dw_data_template <- function(i) {
                   glue("Chronically absent *({round(100*scorecard_df$percent_of_students_absent_10_percent_or_more_ave[i])}%)*"),
                   glue("**{round(100*scorecard_df$percent_of_students_absent_10_percent_or_more[i])}%**"),
                   #Free lunch
-                  glue("Free or reduced-price lunch *({round(100*scorecard_df$free_lunch_ave[i])}%)*"),
-                  glue("**{round(100*scorecard_df$free_lunch[i])}%**"))
-  names(temp) <- c(scorecard_df$school_name_clean[i], 
+                  glue("Low-income students *({round(100*scorecard_df$child_poverty_ave[i])}%)*"),
+                  glue("**{round(100*scorecard_df$child_poverty[i])}%**"))
+  names(temp) <- c(scorecard_df$school_name_clean[i] %>% str_remove(" Magnet"), 
                    glue('<span style="color:red; font-size: 175%;">{scorecard_df$informational_baseline_grade_2023[i]}</span>'))
   temp
 } 
 
-## Mess with Sheehy
-sheehy_data_orig <- dw_data_from_chart("gDxsG")
-dw_data_to_chart(dw_data_template(1),
-                 "gDxsG")
+# ## Mess with Sheehy
+# sheehy_data_orig <- dw_data_from_chart("gDxsG")
+# dw_data_to_chart(dw_data_template(1),
+#                  "gDxsG")
+# 
+# dw_retrieve_chart_metadata("gDxsG")
+# 
+# ## test duplicate Sheehy with Kimbell
+# # kimbell_chart <- dw_copy_chart(copy_from = "gDxsG")
+# kimbell_id <- "ZyLh8"
+# dw_edit_chart(kimbell_id, 
+#               title = scorecard_df$school_name_clean[2],
+#               folderId = 237630)
+# dw_data_to_chart(x = dw_data_template(2),
+#                  chart_id = kimbell_id)
+# 
+# kimbell_chart_meta <- dw_retrieve_chart_metadata(kimbell_id)
+# 
+# ## test2 duplicate Kimbell with Lamb
+# # lamb_chart <- dw_copy_chart(copy_from = kimbell_id)
+# dw_edit_chart(lamb_chart$id,
+#               title = scorecard_df$school_name_clean[3],
+#               folderId = 237630)
+# dw_data_to_chart(x = dw_data_template(3),
+#                  chart_id = lamb_chart$id)
+# 
+# 
+# remaining_charts <- lapply(3:nrow(scorecard_df),
+#                            function(j){ 
+#                              current_chart <- dw_copy_chart(copy_from = kimbell_id)
+#                              dw_edit_chart(current_chart$id,
+#                                            title = scorecard_df$school_name_clean[j],
+#                                            folderId = 237630)
+#                              dw_data_to_chart(x = dw_data_template(j),
+#                                               chart_id = current_chart$id)
+#                              current_chart})
+# 
+# 
+# remaining_charts[[2]]$id
 
-dw_retrieve_chart_metadata("gDxsG")
 
-## test duplicate Sheehy with Kimbell
-# kimbell_chart <- dw_copy_chart(copy_from = "gDxsG")
-kimbell_id <- "ZyLh8"
-dw_edit_chart(kimbell_id, 
-              title = scorecard_df$school_name_clean[2],
-              folderId = 237630)
-dw_data_to_chart(x = dw_data_template(2),
-                 chart_id = kimbell_id)
+## update chart data
+chart_ids <- read_xlsx("data/charts/datawrapper_chart_id_lookup.xlsx") %>% 
+  janitor::clean_names()
 
-kimbell_chart_meta <- dw_retrieve_chart_metadata(kimbell_id)
+# chart_ids <- c("gDxsG", "ZyLh8") %>% 
+#   append(lapply(1:length(remaining_charts),
+#        function(x){
+#          remaining_charts[[x]]$id
+#        }) %>% as.list())
 
-## test2 duplicate Kimbell with Lamb
-lamb_chart <- dw_copy_chart(copy_from = kimbell_id)
-dw_edit_chart(lamb_chart$id,
-              title = scorecard_df$school_name_clean[3],
-              folderId = 237630)
-dw_data_to_chart(x = dw_data_template(3),
-                 chart_id = lamb_chart$id)
-
-
-remaining_charts <- lapply(3:nrow(scorecard_df),
-                           function(j){ 
-                             current_chart <- dw_copy_chart(copy_from = kimbell_id)
-                             dw_edit_chart(current_chart$id,
-                                           title = scorecard_df$school_name_clean[j],
-                                           folderId = 237630)
-                             dw_data_to_chart(x = dw_data_template(j),
-                                              chart_id = current_chart$id)
-                             current_chart})
-
-
-remaining_charts[[2]]$id
-
-
-## update charts 
-chart_ids <- c("gDxsG", "ZyLh8") %>% 
-  append(lapply(1:length(remaining_charts),
-       function(x){
-         remaining_charts[[x]]$id
-       }) %>% as.list())
 lapply(1:33,
        function(k){
-         dw_data_to_chart(chart_id = chart_ids[k],
+         dw_data_to_chart(chart_id = chart_ids$chart_id[k],
                           x = dw_data_template(k))})
 
-chart_id_lookup <- lapply(1:33, 
-                          function(n){
-                            temp <- dw_retrieve_chart_metadata(chart_id = chart_ids[n])
-                            tibble(school_name = temp$content$title)
-                          }) %>% 
-  bind_rows() %>% 
-  mutate(chart_id = chart_ids) %>% 
-  as.data.frame()
+# chart_id_lookup <- lapply(1:33, 
+#                           function(n){
+#                             temp <- dw_retrieve_chart_metadata(chart_id = chart_ids[n])
+#                             tibble(school_name = temp$content$title)
+#                           }) %>% 
+#   bind_rows() %>% 
+#   mutate(chart_id = chart_ids) %>% 
+#   as.data.frame()
 
-write_csv(chart_id_lookup, 
-          "data/charts/datawrapper_chart_id_lookup.csv")
+## update chart metadata
 
+chart_annotation <- paste(c('Notes:',
+                            'D- and F-graded schools are compared to the district average for schools of the same grade level.',
+                            '"Inexperienced teachers" have less than four years of teaching experience or hold a temporary teaching certificate.',
+                            'The time with a substitute teacher is calculated as the total hours taught by a Kelly Education substitutes divided by the estimated total number of teacher-hours, assuming a 180-day school year at 7.5 hours per day.', 
+                            'The share of zoned students choosing another school does not include private school or homeschooled students.', 
+                            'Students are "chronically absent" after missing 10% or more of school days in a year.',
+                            'The share of low-income students is the adjusted percent of students receiving a free or reduced-price lunch.'),
+                          collapse = " ")
+
+lapply(1:33, 
+       function(k){
+         dw_edit_chart(chart_id = chart_ids$chart_id[k],
+                       annotate = chart_annotation)
+       })
+
+## publish charts
+lapply(chart_ids$chart_id, 
+       dw_publish_chart)
 
 
 

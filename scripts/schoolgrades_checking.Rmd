@@ -71,8 +71,9 @@ grade_enrollment <- school_grades %>%
 
 ``` {r 18,000 kids}
 enrollment_2223 %>% 
-  filter(sch_number %in% as.numeric(df_hillsborough$school_number)) %>% 
-  summarise(number_of_students = sum(number_of_students))
+  filter(district == "HILLSBOROUGH",
+         sch_number %in% as.numeric(df_hillsborough$school_number)) %>% 
+  summarise(number_of_students = sum(total_enrollment, na.rm = T))
 ```
 
 

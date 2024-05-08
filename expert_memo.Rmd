@@ -1173,7 +1173,8 @@ top_dist_tom <- school_grades %>%
             df_schools = sum(flag_df),
             total_students = sum(students, na.rm = T),
             df_students = sum(students_df, na.rm = T)) %>% 
-  mutate(share_studets_in_df = df_students/total_students) %>% 
+  mutate(share_studets_in_df = df_students/total_students,
+         district_name = str_to_title(district_name)) %>% 
   arrange(desc(total_students)) %>% 
   write_csv("data/charts/df_schools_by_district.csv")
   
